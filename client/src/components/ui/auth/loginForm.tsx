@@ -7,10 +7,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
 import { EmailVerification } from "./emailVerification";
 import { useAuth } from "@/hooks/use-auth";
+import { signInWithEmail, isEmailVerified } from "@/lib/supabase";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -25,7 +25,7 @@ interface LoginFormProps {
 
 export function LoginForm({ onSuccess }: LoginFormProps) {
   const { toast } = useToast();
-  const { updateVerificationStatus } = useAuth();
+  const { login, updateVerificationStatus } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
   const [userEmail, setUserEmail] = useState("");
@@ -42,41 +42,54 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   async function onSubmit(values: LoginFormValues) {
     setIsLoading(true);
     try {
-      const response = await apiRequest<{ 
-        success: boolean; 
-        user: any; 
-        needsVerification?: boolean;
-        message?: string;
-      }>({
-        url: "/api/login",
-        method: "POST",
-        body: values,
-      });
-
-      if (response.success) {
-        if (response.needsVerification) {
+      // Use Supabase for authentication
+      const { user, session } = await signInWithEmail(values.email, values.password);
+      
+      if (user) {
+        // Check if email is verified
+        const verified = await isEmailVerified();
+        
+        if (!verified) {
           toast({
             title: "Verification required",
-            description: "Please verify your email to continue",
+            description: "Please verify your email to continue. Check your inbox for a verification link.",
           });
           setUserEmail(values.email);
-          setLoginUser(response.user);
+          
+          // Create a user object in our app's format for later use
+          const appUser = {
+            id: user.id,
+            email: user.email || "",
+            username: user.user_metadata?.username || user.email?.split('@')[0] || "",
+            isVerified: false
+          };
+          
+          setLoginUser(appUser);
           setShowVerification(true);
         } else {
+          // Create a user object in our app's format
+          const appUser = {
+            id: user.id,
+            email: user.email || "",
+            username: user.user_metadata?.username || user.email?.split('@')[0] || "",
+            isVerified: true
+          };
+          
           toast({
             title: "Login successful",
-            description: `Welcome back, ${response.user.username}!`,
+            description: `Welcome back, ${appUser.username}!`,
           });
           
-          // Ensure verification status is reflected in auth context
-          updateVerificationStatus(response.user.isVerified || false);
-          onSuccess(response.user);
+          // Update auth context
+          login(appUser);
+          updateVerificationStatus(true);
+          onSuccess(appUser);
         }
       } else {
         toast({
           variant: "destructive",
           title: "Login failed",
-          description: response.message || "Invalid email or password",
+          description: "Invalid email or password",
         });
       }
     } catch (error: any) {

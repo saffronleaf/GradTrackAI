@@ -3,333 +3,79 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
   admissionDataSchema, analysisResultSchema, 
-  loginSchema, registerSchema, verificationSchema, type User 
+  type User 
 } from "@shared/schema";
 import { z } from "zod";
 import fetch from "node-fetch";
-import session from "express-session";
-import MemoryStore from "memorystore";
-import { sendVerificationEmail, isEmailServiceAvailable } from "./email";
+import { createClient } from '@supabase/supabase-js';
 
-declare module 'express-session' {
-  interface SessionData {
-    user: User;
-    authenticated: boolean;
+// Create a Supabase client for server-side operations
+const supabase = createClient(
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_ANON_KEY || ''
+);
+
+// JWT Verification utility for Supabase auth
+async function verifySupabaseToken(token: string): Promise<any> {
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error) throw error;
+    return data.user;
+  } catch (error) {
+    console.error('Error verifying Supabase token:', error);
+    return null;
   }
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Setup session middleware
-  const MemoryStoreSession = MemoryStore(session);
-  app.use(session({
-    secret: 'college-admission-advisor-session-secret',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { 
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    },
-    store: new MemoryStoreSession({
-      checkPeriod: 86400000 // prune expired entries every 24h
-    })
-  }));
-  
-  // Authentication middleware
-  const requireAuth = (req: Request, res: Response, next: NextFunction) => {
-    if (!req.session.authenticated) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "Authentication required" 
-      });
-    }
-    next();
-  };
-  
-  // Register endpoint
-  app.post("/api/register", async (req, res) => {
+  // Authentication middleware that checks for Supabase JWT in Bearer token
+  const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userData = registerSchema.parse(req.body);
-      
-      // Check if user with this email already exists
-      const existingUserByEmail = await storage.getUserByEmail(userData.email);
-      if (existingUserByEmail) {
-        return res.status(400).json({
-          success: false,
-          message: "Email already in use"
-        });
-      }
-      
-      // Check if username is already taken
-      const existingUserByUsername = await storage.getUserByUsername(userData.username);
-      if (existingUserByUsername) {
-        return res.status(400).json({
-          success: false,
-          message: "Username already taken"
-        });
-      }
-      
-      // Create the user (omit confirmPassword as it's not in User type)
-      const { confirmPassword, ...userDataToSave } = userData;
-      const newUser = await storage.createUser(userDataToSave);
-      
-      // Generate a verification code
-      const verificationCode = await storage.createVerificationCode(userData.email);
-      
-      // Send verification email if email service is available
-      if (isEmailServiceAvailable()) {
-        await sendVerificationEmail(userData.email, verificationCode);
-        console.log(`Verification email sent to ${userData.email}`);
-      } else {
-        // If email service is not available, log the code to console
-        console.log(`Verification code for ${userData.email}: ${verificationCode}`);
-      }
-      
-      // Establish session
-      req.session.user = newUser;
-      req.session.authenticated = true;
-      
-      const responseMessage = isEmailServiceAvailable()
-        ? "Please check your email for a verification code to complete your registration."
-        : "Please verify your email with the verification code (check your console for the code).";
-        
-      res.status(201).json({
-        success: true,
-        user: {
-          id: newUser.id,
-          username: newUser.username,
-          email: newUser.email
-        },
-        verificationCode: isEmailServiceAvailable() ? undefined : verificationCode,
-        message: responseMessage
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const fieldErrors = error.errors.map(err => ({
-          path: err.path.join('.'),
-          message: err.message
-        }));
-        
-        res.status(400).json({ 
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ 
           success: false, 
-          message: "Validation error", 
-          errors: fieldErrors 
-        });
-      } else {
-        console.error("Registration error:", error);
-        res.status(500).json({ 
-          success: false, 
-          message: "Could not register user" 
+          message: "Authentication required" 
         });
       }
-    }
-  });
-  
-  // Login endpoint
-  app.post("/api/login", async (req, res) => {
-    try {
-      const loginData = loginSchema.parse(req.body);
       
-      const user = await storage.validateLogin(loginData.email, loginData.password);
+      const token = authHeader.split(' ')[1];
+      const user = await verifySupabaseToken(token);
       
       if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Invalid email or password"
-        });
-      }
-      
-      // Check if email is verified
-      const isVerified = await storage.getUserVerificationStatus(user.email);
-      
-      // Establish session
-      req.session.user = user;
-      req.session.authenticated = true;
-      
-      // If the user isn't verified, indicate we need verification
-      if (!isVerified) {
-        // Generate a new verification code
-        const verificationCode = await storage.createVerificationCode(user.email);
-        
-        // Send verification email if email service is available
-        if (isEmailServiceAvailable()) {
-          await sendVerificationEmail(user.email, verificationCode);
-          console.log(`Verification email sent to ${user.email}`);
-        } else {
-          // If email service is not available, log the code to console
-          console.log(`Verification code for ${user.email}: ${verificationCode}`);
-        }
-        
-        const responseMessage = isEmailServiceAvailable()
-          ? "Please check your email for a verification code to complete your registration."
-          : "Please verify your email to continue. Check the console for the verification code.";
-          
-        return res.json({
-          success: true,
-          needsVerification: true,
-          user: {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            isVerified: false
-          },
-          verificationCode: isEmailServiceAvailable() ? undefined : verificationCode,
-          message: responseMessage
-        });
-      }
-      
-      res.json({
-        success: true,
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          isVerified: true
-        }
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const fieldErrors = error.errors.map(err => ({
-          path: err.path.join('.'),
-          message: err.message
-        }));
-        
-        res.status(400).json({ 
+        return res.status(401).json({ 
           success: false, 
-          message: "Validation error", 
-          errors: fieldErrors 
-        });
-      } else {
-        console.error("Login error:", error);
-        res.status(500).json({ 
-          success: false, 
-          message: "Login failed" 
-        });
-      }
-    }
-  });
-  
-  // Email verification endpoint
-  app.post("/api/verify-email", async (req, res) => {
-    try {
-      const verificationData = verificationSchema.parse(req.body);
-      
-      // Check if the verification code is valid
-      const isVerified = await storage.verifyEmail(verificationData.email, verificationData.code);
-      
-      if (!isVerified) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid verification code"
+          message: "Invalid or expired token" 
         });
       }
       
-      // Update the user's verification status if they're logged in
-      if (req.session.authenticated && req.session.user && req.session.user.email === verificationData.email) {
-        req.session.user.isVerified = true;
-      }
-      
-      res.json({
-        success: true,
-        message: "Email verified successfully"
-      });
+      // Attach user to request object for route handlers
+      (req as any).user = user;
+      next();
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        const fieldErrors = error.errors.map(err => ({
-          path: err.path.join('.'),
-          message: err.message
-        }));
-        
-        res.status(400).json({
-          success: false,
-          message: "Validation error",
-          errors: fieldErrors
-        });
-      } else {
-        console.error("Verification error:", error);
-        res.status(500).json({
-          success: false,
-          message: "Could not verify email"
-        });
-      }
-    }
-  });
-  
-  // Resend verification code endpoint
-  app.post("/api/resend-verification", async (req, res) => {
-    try {
-      const { email } = req.body;
-      
-      if (!email || typeof email !== 'string') {
-        return res.status(400).json({
-          success: false,
-          message: "Email is required"
-        });
-      }
-      
-      // Generate a new verification code
-      const verificationCode = await storage.createVerificationCode(email);
-      
-      // Send verification email if email service is available
-      if (isEmailServiceAvailable()) {
-        await sendVerificationEmail(email, verificationCode);
-        console.log(`Verification email sent to ${email}`);
-      } else {
-        // If email service is not available, log the code to console
-        console.log(`New verification code for ${email}: ${verificationCode}`);
-      }
-      
-      const responseMessage = isEmailServiceAvailable()
-        ? "Verification code sent to your email."
-        : "Verification code sent. Check the console for the code.";
-      
-      res.json({
-        success: true,
-        verificationCode: isEmailServiceAvailable() ? undefined : verificationCode,
-        message: responseMessage
-      });
-    } catch (error) {
-      console.error("Resend verification error:", error);
-      res.status(500).json({
-        success: false,
-        message: "Could not send verification code"
+      console.error('Auth middleware error:', error);
+      return res.status(401).json({ 
+        success: false, 
+        message: "Authentication failed" 
       });
     }
-  });
+  };
   
-  // Logout endpoint
-  app.post("/api/logout", (req, res) => {
-    req.session.destroy((err) => {
-      if (err) {
-        return res.status(500).json({
-          success: false,
-          message: "Could not log out"
-        });
-      }
-      
-      res.json({
-        success: true,
-        message: "Logged out successfully"
-      });
-    });
-  });
+  // Note: All auth endpoints are now handled client-side with Supabase
   
-  // Get current user
-  app.get("/api/me", (req, res) => {
-    if (!req.session.authenticated || !req.session.user) {
-      return res.json({
-        success: false,
-        authenticated: false
-      });
-    }
+  // Get current user details endpoint
+  app.get("/api/me", requireAuth, async (req, res) => {
+    // User is already authenticated by middleware
+    const user = (req as any).user;
     
     res.json({
       success: true,
       authenticated: true,
       user: {
-        id: req.session.user.id,
-        username: req.session.user.username,
-        email: req.session.user.email,
-        isVerified: req.session.user.isVerified || false
+        id: user.id,
+        email: user.email,
+        // Supabase automatically handles email verification
+        isVerified: user.email_confirmed_at !== null
       }
     });
   });
@@ -337,7 +83,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Save assessment result for a user
   app.post("/api/save-assessment", requireAuth, async (req, res) => {
     try {
-      const userId = req.session.user!.id;
+      // User is already authenticated and attached by middleware
+      const userId = (req as any).user.id;
       const { formData, resultData } = req.body;
       
       // Validate the data
@@ -379,7 +126,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user's saved assessments
   app.get("/api/my-assessments", requireAuth, async (req, res) => {
     try {
-      const userId = req.session.user!.id;
+      // User is already authenticated and attached by middleware
+      const userId = (req as any).user.id;
       const results = await storage.getUserResults(userId);
       
       res.json({
@@ -400,8 +148,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate the request body
       const formData = admissionDataSchema.parse(req.body);
       
-      // If user is authenticated, associate the request with their ID
-      const userId = req.session.authenticated ? req.session.user?.id : undefined;
+      // If user is authenticated (via authorization header), associate the request with their ID
+      let userId = undefined;
+      
+      // Check if there's an authorization header to identify the user
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+          const token = authHeader.split(' ')[1];
+          const user = await verifySupabaseToken(token);
+          if (user) {
+            userId = user.id;
+          }
+        } catch (error) {
+          console.log("Could not verify token, proceeding without user ID");
+        }
+      }
       
       // Save the request to storage
       const requestId = await storage.saveAnalysisRequest(formData, userId);

@@ -5,11 +5,12 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SavedResult, AdmissionData, AnalysisResult } from "@shared/schema";
+import { signOut } from "@/lib/supabase";
 
 // Define a more explicit type since the db type might be stored as jsonb
 interface DetailedSavedResult {
   id: number;
-  userId: number;
+  userId: string; // Updated to match Supabase user id type
   formData: AdmissionData;
   resultData: AnalysisResult;
   createdAt: string;
@@ -17,9 +18,10 @@ interface DetailedSavedResult {
 
 interface UserProfileProps {
   user: {
-    id: number;
-    username: string;
+    id: string;
+    username?: string;
     email: string;
+    isVerified?: boolean;
   };
   onLogout: () => void;
 }
@@ -62,24 +64,16 @@ export function UserProfile({ user, onLogout }: UserProfileProps) {
 
   async function handleLogout() {
     try {
-      const response = await apiRequest<{ success: boolean; message: string }>({
-        url: "/api/logout",
-        method: "POST"
+      // Use Supabase for signing out
+      await signOut();
+      
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out"
       });
-
-      if (response.success) {
-        toast({
-          title: "Logged out",
-          description: "You have been successfully logged out"
-        });
-        onLogout();
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: response.message || "Failed to log out"
-        });
-      }
+      
+      // Call the parent component's logout handler
+      onLogout();
     } catch (error: any) {
       toast({
         variant: "destructive",

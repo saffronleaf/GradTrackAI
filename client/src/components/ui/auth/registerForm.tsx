@@ -7,10 +7,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
 import { EmailVerification } from "./emailVerification";
 import { useAuth } from "@/hooks/use-auth";
+import { signUpWithEmail } from "@/lib/supabase";
 
 const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
@@ -30,7 +30,7 @@ interface RegisterFormProps {
 
 export function RegisterForm({ onSuccess }: RegisterFormProps) {
   const { toast } = useToast();
-  const { updateVerificationStatus } = useAuth();
+  const { login, updateVerificationStatus } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
   const [registeredUser, setRegisteredUser] = useState<any>(null);
@@ -49,25 +49,35 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
   async function onSubmit(values: RegisterFormValues) {
     setIsLoading(true);
     try {
-      const response = await apiRequest<{ success: boolean; user: any; message?: string; verificationCode?: string }>({
-        url: "/api/register",
-        method: "POST",
-        body: values,
-      });
-
-      if (response.success) {
+      // Use Supabase for registration
+      const { user } = await signUpWithEmail(
+        values.email, 
+        values.password, 
+        { username: values.username }
+      );
+      
+      if (user) {
+        // Create a user object in our app's format
+        const appUser = {
+          id: user.id,
+          email: user.email || "",
+          username: values.username,
+          isVerified: false
+        };
+        
         toast({
           title: "Registration successful",
-          description: "Please verify your email to continue",
+          description: "Please check your email for a verification link",
         });
-        setRegisteredUser(response.user);
+        
+        setRegisteredUser(appUser);
         setRegisteredEmail(values.email);
         setShowVerification(true);
       } else {
         toast({
           variant: "destructive",
           title: "Registration failed",
-          description: response.message || "An error occurred",
+          description: "Unable to create account",
         });
       }
     } catch (error: any) {

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { supabase } from "@/lib/supabase";
 
 interface EmailVerificationProps {
   email: string;
@@ -12,72 +12,73 @@ interface EmailVerificationProps {
 }
 
 export function EmailVerification({ email, verificationCode, onVerificationSuccess }: EmailVerificationProps) {
-  const [code, setCode] = useState(verificationCode || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const { toast } = useToast();
 
-  const handleVerify = async () => {
-    if (!code || code.length !== 6) {
-      setError("Please enter a valid 6-digit verification code");
-      return;
-    }
+  // With Supabase, we don't handle verification codes manually anymore.
+  // Instead, Supabase sends verification emails with links.
+  // This component now just provides guidance and a way to resend the verification email.
 
+  const handleResendVerification = async () => {
     setIsSubmitting(true);
     setError("");
 
     try {
-      const response = await apiRequest<{ success: boolean; message: string }>({
-        url: "/api/verify-email",
-        method: "POST",
-        body: { email, code },
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
       });
 
-      if (response.success) {
+      if (error) {
+        throw error;
+      }
+      
+      toast({
+        title: "Verification email sent",
+        description: "We've sent a new verification email. Please check your inbox.",
+      });
+    } catch (err: any) {
+      setError(
+        err.message || "An error occurred while sending the verification email. Please try again."
+      );
+      
+      toast({
+        variant: "destructive",
+        title: "Failed to send verification email",
+        description: err.message || "Please try again or contact support.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Check verification status
+  const checkVerificationStatus = async () => {
+    setIsSubmitting(true);
+    setError("");
+
+    try {
+      // Refresh the session and user data
+      const { data, error } = await supabase.auth.refreshSession();
+      
+      if (error) {
+        throw error;
+      }
+      
+      if (data.user?.email_confirmed_at) {
+        // Email has been verified
         toast({
           title: "Email verified",
           description: "Your email has been successfully verified!",
         });
         onVerificationSuccess();
       } else {
-        setError(response.message || "Failed to verify email. Please try again.");
+        setError("Your email is not verified yet. Please check your inbox or resend the verification email.");
       }
     } catch (err: any) {
       setError(
-        err.message || "An error occurred while verifying your email. Please try again."
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleResendCode = async () => {
-    setIsSubmitting(true);
-    setError("");
-
-    try {
-      const response = await apiRequest<{ success: boolean; message: string; verificationCode?: string }>({
-        url: "/api/resend-verification",
-        method: "POST",
-        body: { email },
-      });
-
-      if (response.success) {
-        // In a real application, we would not send the code in the response but would send it via email
-        if (response.verificationCode) {
-          setCode(response.verificationCode);
-        }
-        
-        toast({
-          title: "Verification code sent",
-          description: "A new verification code has been sent to your email.",
-        });
-      } else {
-        setError(response.message || "Failed to send verification code. Please try again.");
-      }
-    } catch (err: any) {
-      setError(
-        err.message || "An error occurred while sending the verification code. Please try again."
+        err.message || "Failed to check verification status. Please try again."
       );
     } finally {
       setIsSubmitting(false);
@@ -89,40 +90,34 @@ export function EmailVerification({ email, verificationCode, onVerificationSucce
       <CardHeader>
         <CardTitle>Verify Your Email</CardTitle>
         <CardDescription>
-          Enter the 6-digit verification code sent to {email}
+          We've sent a verification link to {email}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Input
-              placeholder="Enter verification code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              maxLength={6}
-              className="text-center text-lg tracking-wider"
-            />
-            {error && <p className="text-sm text-red-500">{error}</p>}
+          <div className="p-4 bg-muted/50 rounded-lg text-center">
+            <p className="mb-2">Please check your email inbox and click the verification link we sent to verify your account.</p>
+            {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
           </div>
           <div className="text-sm text-center text-muted-foreground">
-            Didn't receive a code? Check your spam folder or{" "}
+            Didn't receive the email? Check your spam folder or{" "}
             <button
-              onClick={handleResendCode}
+              onClick={handleResendVerification}
               disabled={isSubmitting}
               className="text-primary underline underline-offset-4 hover:text-primary/90 disabled:opacity-50"
             >
-              resend the code
+              resend the verification email
             </button>
           </div>
         </div>
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex justify-center">
         <Button
-          onClick={handleVerify}
-          disabled={isSubmitting || !code}
+          onClick={checkVerificationStatus}
+          disabled={isSubmitting}
           className="w-full"
         >
-          {isSubmitting ? "Verifying..." : "Verify Email"}
+          {isSubmitting ? "Checking..." : "I've Verified My Email"}
         </Button>
       </CardFooter>
     </Card>

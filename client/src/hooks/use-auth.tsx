@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { apiRequest } from "@/lib/queryClient";
+import { User as SupabaseUser } from '@supabase/supabase-js';
+import { getCurrentUser, signOut, isEmailVerified, onAuthStateChange } from "@/lib/supabase";
 
 interface AuthContextType {
   user: User | null;
@@ -7,15 +8,27 @@ interface AuthContextType {
   loading: boolean;
   isVerified: boolean;
   login: (userData: User) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   updateVerificationStatus: (status: boolean) => void;
 }
 
 interface User {
-  id: number;
-  username: string;
+  id: string;
+  username?: string;
   email: string;
-  isVerified?: boolean;
+  isVerified: boolean;
+}
+
+// Convert Supabase user to our app's user format
+function formatSupabaseUser(supabaseUser: SupabaseUser | null): User | null {
+  if (!supabaseUser) return null;
+  
+  return {
+    id: supabaseUser.id,
+    email: supabaseUser.email || '',
+    username: supabaseUser.user_metadata?.username || supabaseUser.email?.split('@')[0] || '',
+    isVerified: supabaseUser.email_confirmed_at ? true : false
+  };
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -24,7 +37,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isVerified: false,
   login: () => {},
-  logout: () => {},
+  logout: async () => {},
   updateVerificationStatus: () => {},
 });
 
@@ -44,19 +57,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Check if the user is already logged in when the app loads
     async function checkAuthStatus() {
       try {
-        const response = await apiRequest<{
-          success: boolean;
-          authenticated: boolean;
-          user?: User;
-        }>({
-          url: "/api/me",
-          method: "GET",
-        });
-
-        if (response.success && response.authenticated && response.user) {
-          setUser(response.user);
-          setAuthenticated(true);
-          setIsVerified(response.user.isVerified || false);
+        const supabaseUser = await getCurrentUser();
+        const verified = await isEmailVerified();
+        
+        if (supabaseUser) {
+          const formattedUser = formatSupabaseUser(supabaseUser);
+          if (formattedUser) {
+            setUser(formattedUser);
+            setAuthenticated(true);
+            setIsVerified(verified);
+          }
         } else {
           setUser(null);
           setAuthenticated(false);
@@ -72,7 +82,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     }
 
+    // Setup auth state change listener
+    const { data: authListener } = onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const formattedUser = formatSupabaseUser(session.user);
+        if (formattedUser) {
+          setUser(formattedUser);
+          setAuthenticated(true);
+          setIsVerified(formattedUser.isVerified);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setAuthenticated(false);
+        setIsVerified(false);
+      } else if (event === 'USER_UPDATED' && session?.user) {
+        const formattedUser = formatSupabaseUser(session.user);
+        if (formattedUser) {
+          setUser(formattedUser);
+          setIsVerified(formattedUser.isVerified);
+        }
+      }
+    });
+
     checkAuthStatus();
+    
+    // Clean up subscription on unmount
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
   }, []);
 
   const login = (userData: User) => {
@@ -81,10 +118,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setIsVerified(userData.isVerified || false);
   };
 
-  const logout = () => {
-    setUser(null);
-    setAuthenticated(false);
-    setIsVerified(false);
+  const logout = async () => {
+    try {
+      await signOut();
+      setUser(null);
+      setAuthenticated(false);
+      setIsVerified(false);
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
   };
   
   const updateVerificationStatus = (status: boolean) => {
