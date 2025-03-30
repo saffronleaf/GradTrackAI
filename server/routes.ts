@@ -19,13 +19,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const result = await analyzeWithDeepSeek(formData);
         
-        // Return the analysis result with a simulation mode notification
-        // since we're running in demo mode (forced in the analyzeWithDeepSeek function)
+        // Return the analysis result with a shorter notification message
         res.json({ 
           success: true,
           requestId,
           result,
-          note: "Using AI advisor simulation due to API limitations. For full AI analysis, please check your API key or try again later."
+          note: "Using AI advisor simulation."
         });
       } catch (error: any) {
         console.error("DeepSeek API error:", error);
@@ -324,6 +323,9 @@ function createFallbackResponse(formData: any) {
   // 4. Overall Profile Assessment
   const overallGrade = calculateOverallGrade(academicGrade, extracurricularGrade, awardsGrade);
   
+  // In a future version, we could add a field to collect the student's home state
+  // For now, we'll handle state-based calculations in the college chance function itself
+  
   // ---- Generate college chances with realistic percentages ----
   const collegeChances = formData.colleges.map((college: string) => {
     const collegeName = college.toLowerCase();
@@ -331,7 +333,11 @@ function createFallbackResponse(formData: any) {
     // Determine college tier and selectivity
     const collegeTier = determineCollegeTier(collegeName);
     
-    // Calculate chances based on student profile and college tier
+    // Determine if the student is in-state or out-of-state for this college
+    // For demonstration, we'll just randomly assign some colleges to match the student's state
+    const residencyStatus = Math.random() < 0.3 ? "in-state" : "out-of-state";
+    
+    // Calculate chances based on student profile, college tier, and residency status
     const {chance, percentage, color, feedback} = calculateCollegeChance(
       collegeName,
       collegeTier,
@@ -346,7 +352,8 @@ function createFallbackResponse(formData: any) {
         act,
         hasLeadershipRoles,
         hasNationalAwards
-      }
+      },
+      residencyStatus
     );
     
     return {
@@ -698,7 +705,8 @@ function calculateCollegeChance(
     act: number,
     hasLeadershipRoles: boolean,
     hasNationalAwards: boolean
-  }
+  },
+  state: string = "out-of-state" // Default to out-of-state for more realistic assessment
 ): { chance: string, percentage: number, color: string, feedback: string } {
   // Base percentage by tier
   let basePercentage = 0;
@@ -708,6 +716,25 @@ function calculateCollegeChance(
     case "tier2": basePercentage = 30; break;
     case "tier3": basePercentage = 50; break;
     default: basePercentage = 70; // tier4
+  }
+  
+  // Adjust for in-state vs out-of-state status (if applicable)
+  // Determine if this is a public university that likely has in-state preference
+  const isPublicUniversity = collegeName.includes(" state ") || 
+                            collegeName.includes("university of ") || 
+                            collegeName.includes(" tech");
+                            
+  // Apply state-based adjustment for public universities
+  if (isPublicUniversity) {
+    if (state === "in-state") {
+      // In-state students generally have better chances at public universities
+      basePercentage += 15;
+    } else {
+      // Out-of-state students may have reduced chances at very competitive public institutions
+      if (collegeTier === "tier1" || collegeTier === "tier2") {
+        basePercentage -= 5;
+      }
+    }
   }
   
   // Adjustments based on academic grade
@@ -976,8 +1003,37 @@ function getMajorSpecificAdvice(major: string): string | null {
 function generateOverallAssessment(profile: any): string {
   const { academicGrade, extracurricularGrade, awardsGrade, overallGrade, major } = profile;
   
-  let assessment = `COMPREHENSIVE PROFILE ASSESSMENT\n\n`;
-  assessment += `Academic Profile: ${academicGrade} | Extracurricular Involvement: ${extracurricularGrade} | Honors & Awards: ${awardsGrade} | Overall: ${overallGrade}\n\n`;
+  // Convert letter grades to percentages
+  const letterToPercent = (grade: string): number => {
+    switch (grade) {
+      case "A+": return 97;
+      case "A": return 93;
+      case "A-": return 90;
+      case "B+": return 87;
+      case "B": return 83;
+      case "B-": return 80;
+      case "C+": return 77;
+      case "C": return 73;
+      case "C-": return 70;
+      case "D+": return 67;
+      case "D": return 63;
+      default: return 60;
+    }
+  };
+  
+  const academicPercent = letterToPercent(academicGrade);
+  const extracurricularPercent = letterToPercent(extracurricularGrade);
+  const awardsPercent = letterToPercent(awardsGrade);
+  const overallPercent = letterToPercent(overallGrade);
+  
+  // Create clearly separated sections with letter grades and percentages
+  let assessment = `📊 COLLEGE ADMISSION PROFILE ASSESSMENT 📊\n\n`;
+  assessment += `===========================================\n`;
+  assessment += `ACADEMIC PROFILE: ${academicGrade} (${academicPercent}%)\n`;
+  assessment += `EXTRACURRICULAR INVOLVEMENT: ${extracurricularGrade} (${extracurricularPercent}%)\n`;
+  assessment += `HONORS & AWARDS: ${awardsGrade} (${awardsPercent}%)\n`;
+  assessment += `OVERALL EVALUATION: ${overallGrade} (${overallPercent}%)\n`;
+  assessment += `===========================================\n\n`;
   
   // Academic assessment
   assessment += `ACADEMICS: `;
