@@ -167,6 +167,21 @@ function getColorForChance(chance: string): string {
   return 'red-500';
 }
 
+function getColorForTier(tier: string): string {
+  switch (tier) {
+    case "ivy-plus":
+      return "violet-600"; // Elite schools get a distinctive violet color
+    case "tier1":
+      return "blue-600"; // Top-tier schools get blue
+    case "tier2":
+      return "teal-600"; // Second-tier schools get teal
+    case "tier3":
+      return "emerald-600"; // Third-tier schools get emerald
+    default:
+      return "gray-600"; // Default for other tiers
+  }
+}
+
 function createPromptFromFormData(formData: any) {
   return `
 Please analyze this student's profile for college admissions and provide feedback in JSON format:
@@ -359,6 +374,8 @@ function createFallbackResponse(formData: any) {
       name: college,
       chance: `${chance} (${percentage}%)`,
       color,
+      collegeTier,
+      tierColor: getColorForTier(collegeTier),
       feedback
     };
   });
@@ -389,6 +406,63 @@ function createFallbackResponse(formData: any) {
     colleges: formData.colleges
   });
   
+  // ---- Create assessment sections ----
+  const academicSection = {
+    title: "Academic Profile Assessment",
+    grade: academicGrade,
+    content: `Your academic profile received a grade of ${academicGrade}. ${academicGrade.includes("A") ? "You have a strong academic foundation" : 
+              academicGrade.includes("B") ? "Your academic record is solid but could be improved" : 
+              "Your academic record needs significant improvement"}. GPA: ${gpa}, ${sat ? `SAT: ${sat}, ` : ''}${act ? `ACT: ${act}, ` : ''}AP Courses: ${apCourses}.`,
+    strengths: [
+      gpa >= 3.7 ? "Strong unweighted GPA demonstrates consistent academic performance" : null,
+      sat >= 1450 ? "Excellent SAT score places you in a competitive position" : null,
+      act >= 32 ? "Impressive ACT score strengthens your academic profile" : null,
+      apCourses >= 7 ? "Substantial AP/IB coursework shows academic rigor" : null
+    ].filter(Boolean) as string[],
+    weaknesses: [
+      gpa < 3.5 ? "GPA is below the competitive threshold for elite institutions" : null,
+      sat < 1400 && sat > 0 ? "SAT score may limit opportunities at highly selective schools" : null,
+      act < 30 && act > 0 ? "ACT score needs improvement for top-tier colleges" : null,
+      apCourses < 5 ? "Limited number of AP/IB courses indicates insufficient academic rigor" : null,
+    ].filter(Boolean) as string[]
+  };
+  
+  const extracurricularSection = {
+    title: "Extracurricular Activities Assessment",
+    grade: extracurricularGrade,
+    content: `Your extracurricular profile received a grade of ${extracurricularGrade}. You have ${extracurricularCount} significant activities${hasLeadershipRoles ? " with leadership positions" : ""}. ${hasLongTermCommitment ? "You've demonstrated commitment over time" : "Your activities lack long-term commitment"}.`,
+    strengths: [
+      hasLeadershipRoles ? "Leadership positions demonstrate initiative and responsibility" : null,
+      hasLongTermCommitment ? "Long-term commitment to activities shows dedication" : null,
+      hasSignificantTimeCommitment ? "Significant time investment indicates passion" : null,
+      hasMajorRelatedActivities ? `Activities aligned with ${formData.major} strengthen your application narrative` : null
+    ].filter(Boolean) as string[],
+    weaknesses: [
+      !hasLeadershipRoles ? "Lack of leadership positions reduces the impact of your activities" : null,
+      !hasLongTermCommitment ? "Insufficient long-term commitment to any single activity" : null,
+      extracurricularCount < 3 ? "Too few substantial activities in your profile" : null,
+      !hasMajorRelatedActivities ? `No activities related to your intended major (${formData.major})` : null
+    ].filter(Boolean) as string[]
+  };
+  
+  const honorsSection = {
+    title: "Honors & Awards Assessment",
+    grade: awardsGrade,
+    content: `Your honors & awards profile received a grade of ${awardsGrade}. You have ${awardCount} significant honors/awards${hasNationalAwards ? " including national recognition" : hasStateAwards ? " including state-level recognition" : ""}.`,
+    strengths: [
+      hasNationalAwards ? "National awards significantly enhance your competitiveness" : null,
+      hasStateAwards ? "State-level recognition demonstrates achievement beyond your school" : null,
+      awardCount >= 3 ? "Multiple awards show consistent recognition of your abilities" : null,
+      hasMajorRelatedAwards ? `Awards related to ${formData.major} strengthen your specialization narrative` : null
+    ].filter(Boolean) as string[],
+    weaknesses: [
+      !hasNationalAwards && !hasStateAwards ? "Lack of recognition beyond school level limits impact" : null,
+      awardCount < 2 ? "Too few awards or honors in your profile" : null,
+      !hasMajorRelatedAwards ? `No awards related to your intended major (${formData.major})` : null,
+      !hasRecentAwards ? "No recent awards suggests declining achievement" : null
+    ].filter(Boolean) as string[]
+  };
+  
   // ---- Create detailed overall assessment ----
   const overallAssessment = generateOverallAssessment({
     academicGrade,
@@ -407,8 +481,11 @@ function createFallbackResponse(formData: any) {
     colleges: formData.colleges
   });
   
+  const assessmentSections = [academicSection, extracurricularSection, honorsSection];
+  
   return {
     overallAssessment,
+    assessmentSections,
     collegeChances,
     improvementPlan
   };
@@ -707,14 +784,14 @@ function calculateCollegeChance(
   },
   state: string = "out-of-state" // Default to out-of-state for more realistic assessment
 ): { chance: string, percentage: number, color: string, feedback: string } {
-  // Base percentage by tier
+  // Base percentage by tier - much more unforgiving
   let basePercentage = 0;
   switch (collegeTier) {
-    case "ivy-plus": basePercentage = 5; break;
-    case "tier1": basePercentage = 15; break;
-    case "tier2": basePercentage = 30; break;
-    case "tier3": basePercentage = 50; break;
-    default: basePercentage = 70; // tier4
+    case "ivy-plus": basePercentage = 2; break; // Elite institutions highly selective
+    case "tier1": basePercentage = 8; break; // Very competitive
+    case "tier2": basePercentage = 20; break; // Still difficult
+    case "tier3": basePercentage = 35; break; // Moderately selective
+    default: basePercentage = 60; // Less selective but still challenging
   }
   
   // Adjust for in-state vs out-of-state status (if applicable)

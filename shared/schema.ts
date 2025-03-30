@@ -63,11 +63,22 @@ export const collegeChanceSchema = z.object({
   name: z.string(),
   chance: z.string(),
   color: z.string(),
+  collegeTier: z.string().optional(),
+  tierColor: z.string().optional(),
   feedback: z.string(),
+});
+
+export const assessmentSectionSchema = z.object({
+  title: z.string(),
+  grade: z.string().optional(),
+  content: z.string(),
+  strengths: z.array(z.string()).optional(),
+  weaknesses: z.array(z.string()).optional(),
 });
 
 export const analysisResultSchema = z.object({
   overallAssessment: z.string(),
+  assessmentSections: z.array(assessmentSectionSchema).optional(),
   collegeChances: z.array(collegeChanceSchema),
   improvementPlan: z.array(z.string()),
   isFallbackMode: z.boolean().optional(),
@@ -75,4 +86,5 @@ export const analysisResultSchema = z.object({
 });
 
 export type CollegeChance = z.infer<typeof collegeChanceSchema>;
+export type AssessmentSection = z.infer<typeof assessmentSectionSchema>;
 export type AnalysisResult = z.infer<typeof analysisResultSchema>;
