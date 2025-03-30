@@ -2,20 +2,50 @@ import { pgTable, text, serial, integer, boolean, jsonb } from "drizzle-orm/pg-c
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// User credentials schema remains the same
+// Enhanced user schema with email
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  createdAt: text("created_at").notNull().default(new Date().toISOString()),
+});
+
+// Create a table to store saved analysis results
+export const savedResults = pgTable("saved_results", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  resultData: jsonb("result_data").notNull(),
+  formData: jsonb("form_data").notNull(), 
+  createdAt: text("created_at").notNull().default(new Date().toISOString()),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
+  email: true,
   username: true,
   password: true,
 });
 
+export const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+export const registerSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string().min(6, "Password must be at least 6 characters"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type LoginUser = z.infer<typeof loginSchema>;
+export type RegisterUser = z.infer<typeof registerSchema>;
 export type User = typeof users.$inferSelect;
+export type SavedResult = typeof savedResults.$inferSelect;
 
 // Schema for academic information
 export const academicInfoSchema = z.object({

@@ -45,8 +45,11 @@ export function AdmissionForm() {
   // Mutation for submitting form data
   const { mutate, isPending } = useMutation({
     mutationFn: async (data: AdmissionData) => {
-      const response = await apiRequest("POST", "/api/analyze-admission", data);
-      return response.json();
+      return apiRequest({
+        url: "/api/analyze-admission",
+        method: "POST",
+        body: data
+      });
     },
     onSuccess: (data) => {
       if (data.success) {

@@ -1,19 +1,266 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { admissionDataSchema, analysisResultSchema } from "@shared/schema";
+import { 
+  admissionDataSchema, analysisResultSchema, 
+  loginSchema, registerSchema, type User 
+} from "@shared/schema";
 import { z } from "zod";
 import fetch from "node-fetch";
+import session from "express-session";
+import MemoryStore from "memorystore";
+
+declare module 'express-session' {
+  interface SessionData {
+    user: User;
+    authenticated: boolean;
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup session middleware
+  const MemoryStoreSession = MemoryStore(session);
+  app.use(session({
+    secret: 'college-admission-advisor-session-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { 
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    },
+    store: new MemoryStoreSession({
+      checkPeriod: 86400000 // prune expired entries every 24h
+    })
+  }));
+  
+  // Authentication middleware
+  const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.authenticated) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Authentication required" 
+      });
+    }
+    next();
+  };
+  
+  // Register endpoint
+  app.post("/api/register", async (req, res) => {
+    try {
+      const userData = registerSchema.parse(req.body);
+      
+      // Check if user with this email already exists
+      const existingUserByEmail = await storage.getUserByEmail(userData.email);
+      if (existingUserByEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Email already in use"
+        });
+      }
+      
+      // Check if username is already taken
+      const existingUserByUsername = await storage.getUserByUsername(userData.username);
+      if (existingUserByUsername) {
+        return res.status(400).json({
+          success: false,
+          message: "Username already taken"
+        });
+      }
+      
+      // Create the user (omit confirmPassword as it's not in User type)
+      const { confirmPassword, ...userDataToSave } = userData;
+      const newUser = await storage.createUser(userDataToSave);
+      
+      // Establish session
+      req.session.user = newUser;
+      req.session.authenticated = true;
+      
+      res.status(201).json({
+        success: true,
+        user: {
+          id: newUser.id,
+          username: newUser.username,
+          email: newUser.email
+        }
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const fieldErrors = error.errors.map(err => ({
+          path: err.path.join('.'),
+          message: err.message
+        }));
+        
+        res.status(400).json({ 
+          success: false, 
+          message: "Validation error", 
+          errors: fieldErrors 
+        });
+      } else {
+        console.error("Registration error:", error);
+        res.status(500).json({ 
+          success: false, 
+          message: "Could not register user" 
+        });
+      }
+    }
+  });
+  
+  // Login endpoint
+  app.post("/api/login", async (req, res) => {
+    try {
+      const loginData = loginSchema.parse(req.body);
+      
+      const user = await storage.validateLogin(loginData.email, loginData.password);
+      
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid email or password"
+        });
+      }
+      
+      // Establish session
+      req.session.user = user;
+      req.session.authenticated = true;
+      
+      res.json({
+        success: true,
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email
+        }
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const fieldErrors = error.errors.map(err => ({
+          path: err.path.join('.'),
+          message: err.message
+        }));
+        
+        res.status(400).json({ 
+          success: false, 
+          message: "Validation error", 
+          errors: fieldErrors 
+        });
+      } else {
+        console.error("Login error:", error);
+        res.status(500).json({ 
+          success: false, 
+          message: "Login failed" 
+        });
+      }
+    }
+  });
+  
+  // Logout endpoint
+  app.post("/api/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          message: "Could not log out"
+        });
+      }
+      
+      res.json({
+        success: true,
+        message: "Logged out successfully"
+      });
+    });
+  });
+  
+  // Get current user
+  app.get("/api/me", (req, res) => {
+    if (!req.session.authenticated || !req.session.user) {
+      return res.json({
+        success: false,
+        authenticated: false
+      });
+    }
+    
+    res.json({
+      success: true,
+      authenticated: true,
+      user: {
+        id: req.session.user.id,
+        username: req.session.user.username,
+        email: req.session.user.email
+      }
+    });
+  });
+  
+  // Save assessment result for a user
+  app.post("/api/save-assessment", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.user!.id;
+      const { formData, resultData } = req.body;
+      
+      // Validate the data
+      const validatedFormData = admissionDataSchema.parse(formData);
+      const validatedResultData = analysisResultSchema.parse(resultData);
+      
+      // Save the result
+      const savedResult = await storage.saveUserResult(userId, validatedFormData, validatedResultData);
+      
+      res.json({
+        success: true,
+        savedResult: {
+          id: savedResult.id,
+          createdAt: savedResult.createdAt
+        }
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const fieldErrors = error.errors.map(err => ({
+          path: err.path.join('.'),
+          message: err.message
+        }));
+        
+        res.status(400).json({ 
+          success: false, 
+          message: "Validation error", 
+          errors: fieldErrors 
+        });
+      } else {
+        console.error("Error saving assessment:", error);
+        res.status(500).json({ 
+          success: false, 
+          message: "Could not save assessment" 
+        });
+      }
+    }
+  });
+  
+  // Get user's saved assessments
+  app.get("/api/my-assessments", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.user!.id;
+      const results = await storage.getUserResults(userId);
+      
+      res.json({
+        success: true,
+        results
+      });
+    } catch (error) {
+      console.error("Error fetching assessments:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Could not fetch assessments" 
+      });
+    }
+  });
   // API for analyzing college admission chances
   app.post("/api/analyze-admission", async (req, res) => {
     try {
       // Validate the request body
       const formData = admissionDataSchema.parse(req.body);
       
+      // If user is authenticated, associate the request with their ID
+      const userId = req.session.authenticated ? req.session.user?.id : undefined;
+      
       // Save the request to storage
-      const requestId = await storage.saveAnalysisRequest(formData);
+      const requestId = await storage.saveAnalysisRequest(formData, userId);
       
       // Process the data with DeepSeek API
       try {
@@ -784,14 +1031,14 @@ function calculateCollegeChance(
   },
   state: string = "out-of-state" // Default to out-of-state for more realistic assessment
 ): { chance: string, percentage: number, color: string, feedback: string } {
-  // Base percentage by tier - much more unforgiving
+  // Base percentage by tier - extremely unforgiving
   let basePercentage = 0;
   switch (collegeTier) {
-    case "ivy-plus": basePercentage = 2; break; // Elite institutions highly selective
-    case "tier1": basePercentage = 8; break; // Very competitive
-    case "tier2": basePercentage = 20; break; // Still difficult
-    case "tier3": basePercentage = 35; break; // Moderately selective
-    default: basePercentage = 60; // Less selective but still challenging
+    case "ivy-plus": basePercentage = 1; break; // Elite institutions are nearly impossible
+    case "tier1": basePercentage = 4; break; // Extremely competitive
+    case "tier2": basePercentage = 12; break; // Very difficult
+    case "tier3": basePercentage = 25; break; // Challenging
+    default: basePercentage = 40; // Still quite selective
   }
   
   // Adjust for in-state vs out-of-state status (if applicable)
@@ -813,44 +1060,44 @@ function calculateCollegeChance(
     }
   }
   
-  // Adjustments based on academic grade
+  // Adjustments based on academic grade - more demanding
   let academicBonus = 0;
   switch (profile.academicGrade) {
-    case "A+": academicBonus = 15; break;
-    case "A": academicBonus = 12; break;
-    case "A-": academicBonus = 9; break;
-    case "B+": academicBonus = 6; break;
-    case "B": academicBonus = 3; break;
-    case "B-": academicBonus = 0; break;
-    case "C+": academicBonus = -3; break;
-    case "C": academicBonus = -6; break;
-    default: academicBonus = -10; break;
+    case "A+": academicBonus = 12; break; // Only perfect records get significant bonus
+    case "A": academicBonus = 8; break;
+    case "A-": academicBonus = 5; break;
+    case "B+": academicBonus = 1; break; // B+ barely helps
+    case "B": academicBonus = -2; break; // B actually hurts for selective schools
+    case "B-": academicBonus = -5; break;
+    case "C+": academicBonus = -8; break;
+    case "C": academicBonus = -12; break;
+    default: academicBonus = -15; break; // Severe penalty for low academics
   }
   
-  // Adjustments based on extracurricular grade
+  // Adjustments based on extracurricular grade - more demanding
   let ecBonus = 0;
   switch (profile.extracurricularGrade) {
-    case "A+": ecBonus = 10; break;
-    case "A": ecBonus = 8; break;
-    case "A-": ecBonus = 6; break;
-    case "B+": ecBonus = 4; break;
-    case "B": ecBonus = 2; break;
-    case "B-": ecBonus = 0; break;
-    case "C+": ecBonus = -2; break;
-    case "C": ecBonus = -4; break;
-    default: ecBonus = -6; break;
+    case "A+": ecBonus = 7; break; // Even perfect ECs provide less boost
+    case "A": ecBonus = 5; break;
+    case "A-": ecBonus = 3; break;
+    case "B+": ecBonus = 1; break;
+    case "B": ecBonus = -1; break; // B level ECs now hurt chances
+    case "B-": ecBonus = -3; break;
+    case "C+": ecBonus = -5; break;
+    case "C": ecBonus = -7; break;
+    default: ecBonus = -10; break;
   }
   
-  // Adjustments based on awards grade
+  // Adjustments based on awards grade - more demanding
   let awardsBonus = 0;
   switch (profile.awardsGrade) {
-    case "A+": awardsBonus = 5; break;
-    case "A": awardsBonus = 4; break;
-    case "A-": awardsBonus = 3; break;
-    case "B+": awardsBonus = 2; break;
-    case "B": awardsBonus = 1; break;
-    case "B-": awardsBonus = 0; break;
-    default: awardsBonus = -1; break;
+    case "A+": awardsBonus = 4; break; // Less impact from awards
+    case "A": awardsBonus = 2; break;
+    case "A-": awardsBonus = 1; break;
+    case "B+": awardsBonus = 0; break; // No benefit for average recognition
+    case "B": awardsBonus = -1; break;
+    case "B-": awardsBonus = -2; break;
+    default: awardsBonus = -3; break;
   }
   
   // Special bonuses for top institutions
@@ -896,12 +1143,12 @@ function calculateCollegeChance(
   // Ensure percentage is in reasonable bounds
   finalPercentage = Math.min(Math.max(finalPercentage, 1), 95);
   
-  // Determine chance level and color
+  // Determine chance level and color - much stricter tiers
   let chance, color;
-  if (finalPercentage >= 70) {
+  if (finalPercentage >= 80) {
     chance = "High";
     color = "green-500";
-  } else if (finalPercentage >= 40) {
+  } else if (finalPercentage >= 55) {
     chance = "Medium";
     color = "yellow-500";
   } else {
