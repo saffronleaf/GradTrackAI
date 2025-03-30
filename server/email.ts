@@ -7,11 +7,6 @@ let transporter: nodemailer.Transporter;
  * Initialize the email transporter with the given credentials
  */
 export function initEmailService() {
-  // For Gmail, you'll need to:
-  // 1. Enable 2FA on your Google account
-  // 2. Generate an App Password (Google Account -> Security -> App Passwords)
-  // 3. Use that App Password here instead of your regular password
-  
   // Check for required environment variables
   const emailUser = process.env.EMAIL_USER;
   const emailPass = process.env.EMAIL_PASSWORD;
@@ -22,12 +17,20 @@ export function initEmailService() {
   }
   
   try {
+    // Configuration for Gmail with "Less secure app access" option
+    // Note: For Gmail accounts, the user might need to:
+    // - Allow less secure apps: https://myaccount.google.com/lesssecureapps
+    // - If using 2FA, they will need to use an App Password instead
     transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: emailUser,
         pass: emailPass,
       },
+      // For some accounts, you might need to set these options
+      tls: {
+        rejectUnauthorized: false
+      }
     });
     
     console.log("Email service initialized successfully");
