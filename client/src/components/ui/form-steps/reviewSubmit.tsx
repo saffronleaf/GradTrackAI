@@ -163,9 +163,17 @@ export function ReviewSubmit({ formData, onPrev, onSubmit, isSubmitting }: Revie
                   </ul>
                 )}
               </div>
-              <div>
+              <div className="mb-3">
                 <h4 className="text-sm font-medium text-gray-500">Intended Major</h4>
                 <p className="text-sm text-gray-900">{formData.major || "Not provided"}</p>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium text-gray-500">Residency Status</h4>
+                <p className="text-sm text-gray-900">
+                  {formData.residency === "in-state" ? "In-State Student" : 
+                   formData.residency === "international" ? "International Student" :
+                   "Out-of-State Student"}
+                </p>
               </div>
             </div>
           </div>

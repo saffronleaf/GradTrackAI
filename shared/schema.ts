@@ -50,6 +50,7 @@ export const admissionDataSchema = z.object({
   honorsAwards: z.array(honorAwardSchema),
   colleges: z.array(z.string()),
   major: z.string().min(1, "Major is required"),
+  residency: z.enum(["in-state", "out-of-state", "international"]).optional(),
 });
 
 export type AcademicInfo = z.infer<typeof academicInfoSchema>;

@@ -333,9 +333,8 @@ function createFallbackResponse(formData: any) {
     // Determine college tier and selectivity
     const collegeTier = determineCollegeTier(collegeName);
     
-    // Determine if the student is in-state or out-of-state for this college
-    // For demonstration, we'll just randomly assign some colleges to match the student's state
-    const residencyStatus = Math.random() < 0.3 ? "in-state" : "out-of-state";
+    // Use residency status from the form data if available, otherwise default to out-of-state
+    const residencyStatus = formData.residency || "out-of-state";
     
     // Calculate chances based on student profile, college tier, and residency status
     const {chance, percentage, color, feedback} = calculateCollegeChance(
@@ -1026,106 +1025,186 @@ function generateOverallAssessment(profile: any): string {
   const awardsPercent = letterToPercent(awardsGrade);
   const overallPercent = letterToPercent(overallGrade);
   
-  // Create clearly separated sections with letter grades and percentages
+  // Create multiple clearly separated sections with letter grades and percentages
   let assessment = `📊 COLLEGE ADMISSION PROFILE ASSESSMENT 📊\n\n`;
-  assessment += `===========================================\n`;
+  
+  // SECTION 1: SUMMARY OF GRADES
+  assessment += `==================================================\n`;
+  assessment += `💯 PROFILE GRADES 💯\n`;
+  assessment += `==================================================\n`;
   assessment += `ACADEMIC PROFILE: ${academicGrade} (${academicPercent}%)\n`;
   assessment += `EXTRACURRICULAR INVOLVEMENT: ${extracurricularGrade} (${extracurricularPercent}%)\n`;
   assessment += `HONORS & AWARDS: ${awardsGrade} (${awardsPercent}%)\n`;
-  assessment += `OVERALL EVALUATION: ${overallGrade} (${overallPercent}%)\n`;
-  assessment += `===========================================\n\n`;
+  assessment += `OVERALL EVALUATION: ${overallGrade} (${overallPercent}%)\n\n`;
   
-  // Academic assessment
-  assessment += `ACADEMICS: `;
+  // SECTION 2: ACADEMIC ASSESSMENT
+  assessment += `==================================================\n`;
+  assessment += `📚 ACADEMIC ASSESSMENT: ${academicGrade} (${academicPercent}%) 📚\n`;
+  assessment += `==================================================\n`;
   if (academicGrade.startsWith('A')) {
     assessment += `Your academic record is strong with a ${profile.gpa} GPA${profile.apCourses ? ` and ${profile.apCourses} AP/advanced courses` : ''}. `;
     if (profile.sat >= 1400 || profile.act >= 31) {
-      assessment += `Your test scores are competitive for even highly selective institutions. `;
+      assessment += `Your test scores are competitive for selective institutions. `;
     } else if (profile.sat >= 1250 || profile.act >= 28) {
-      assessment += `Your test scores are solid, though you might consider retesting to be competitive for the most selective schools. `;
+      assessment += `Your test scores are solid, though you need higher scores (1500+ SAT/34+ ACT) to be truly competitive for top-20 schools. `;
     } else if (profile.sat > 0 || profile.act > 0) {
-      assessment += `Consider retaking standardized tests to strengthen your academic profile. `;
+      assessment += `Your test scores need significant improvement to match your GPA for selective schools. `;
     } else {
-      assessment += `Consider taking standardized tests or applying to test-optional schools. `;
+      assessment += `No standardized test scores provided - this is a significant gap unless you're targeting test-optional schools. `;
     }
   } else if (academicGrade.startsWith('B')) {
-    assessment += `Your academic performance is good with a ${profile.gpa} GPA, but strengthening your senior year grades could improve your chances. `;
+    assessment += `Your academic performance is average with a ${profile.gpa} GPA - this will be a major hurdle for top-50 schools where the average GPA is typically 3.8+. `;
     if (profile.sat >= 1350 || profile.act >= 30) {
-      assessment += `Your strong test scores help compensate for your GPA. `;
+      assessment += `Your strong test scores help compensate for your GPA, but the GPA threshold will still be challenging for highly selective schools. `;
     } else {
-      assessment += `Consider focusing on standardized test preparation to complement your GPA. `;
+      assessment += `Both your GPA and test scores are below competitive ranges for selective institutions. `;
     }
   } else {
-    assessment += `Your academic record shows room for improvement. Focus on demonstrating an upward trend in your grades, especially in core subjects. `;
-    assessment += `Consider test-optional schools or invest in standardized test preparation if you tend to test well. `;
+    assessment += `Your academic record (${profile.gpa} GPA) is below the threshold for selective colleges where admitted students typically have 3.7+ unweighted GPAs. `;
+    assessment += `Focus on test-optional schools or schools with 70%+ acceptance rates where your profile may be more competitive. `;
   }
+  assessment += `\n\nStrengths: `;
+  if (profile.gpa >= 3.7) assessment += `Strong GPA. `;
+  if (profile.sat >= 1450 || profile.act >= 33) assessment += `Excellent test scores. `;
+  if (profile.apCourses >= 7) assessment += `Rigorous course load with multiple AP/IB courses. `;
   
-  // Extracurricular assessment
-  assessment += `\n\nEXTRACURRICULARS: `;
+  assessment += `\n\nWeaknesses: `;
+  if (profile.gpa < 3.7) assessment += `GPA below competitive threshold for selective schools. `;
+  if ((profile.sat > 0 && profile.sat < 1400) || (profile.act > 0 && profile.act < 31)) assessment += `Test scores below target range for selective colleges. `;
+  if (profile.sat === 0 && profile.act === 0) assessment += `No standardized test scores provided. `;
+  if (profile.apCourses < 5) assessment += `Limited advanced coursework. `;
+  
+  // SECTION 3: EXTRACURRICULAR ASSESSMENT
+  assessment += `\n\n==================================================\n`;
+  assessment += `🏆 EXTRACURRICULAR ASSESSMENT: ${extracurricularGrade} (${extracurricularPercent}%) 🏆\n`;
+  assessment += `==================================================\n`;
   if (extracurricularGrade.startsWith('A')) {
     assessment += `Your involvement in ${profile.extracurricularCount} activities${profile.hasLeadershipRoles ? ' with leadership positions' : ''} demonstrates commitment and initiative. `;
-    assessment += `This level of engagement is viewed favorably by selective institutions. `;
-  } else if (extracurricularGrade.startsWith('B')) {
-    assessment += `Your extracurricular profile shows solid involvement. `;
     if (!profile.hasLeadershipRoles) {
-      assessment += `Seeking leadership roles would strengthen this area. `;
+      assessment += `For top-tier schools, leadership roles are practically a requirement - this is an area to address. `;
+    }
+  } else if (extracurricularGrade.startsWith('B')) {
+    assessment += `Your extracurricular profile shows moderate involvement but lacks the depth and distinguishing achievements top schools seek. `;
+    if (!profile.hasLeadershipRoles) {
+      assessment += `The absence of leadership positions is a significant weakness for selective admissions. `;
     }
     if (profile.extracurricularCount < 3) {
-      assessment += `Consider adding 1-2 more meaningful activities, especially those related to your intended major. `;
+      assessment += `Your limited number of activities suggests a lack of diverse interests or community engagement. `;
     }
   } else {
-    assessment += `This area of your application would benefit from deeper involvement. Focus on quality over quantity by investing significant time in fewer activities rather than minimal time in many. `;
-    assessment += `Seek leadership opportunities and activities that connect to your academic interests. `;
+    assessment += `Your extracurricular profile is underdeveloped compared to competitive applicants. Top colleges seek students who have made meaningful impacts through sustained involvement and leadership. `;
+    assessment += `This is a critical area to strengthen before applying to selective institutions. `;
   }
   
-  // Awards assessment
-  assessment += `\n\nHONORS & AWARDS: `;
+  assessment += `\n\nStrengths: `;
+  if (profile.hasLeadershipRoles) assessment += `Demonstrated leadership experience. `;
+  if (profile.extracurricularCount >= 4) assessment += `Multiple activities showing diverse interests. `;
+  if (profile.hasLongTermCommitment) assessment += `Long-term commitment to activities. `;
+  
+  assessment += `\n\nWeaknesses: `;
+  if (!profile.hasLeadershipRoles) assessment += `Lack of leadership positions. `;
+  if (!profile.hasMajorRelatedActivities) assessment += `Few activities related to intended major. `;
+  if (profile.extracurricularCount < 3) assessment += `Limited extracurricular engagement. `;
+  if (!profile.hasSignificantTimeCommitment) assessment += `No activities with significant time commitment. `;
+  
+  // SECTION 4: HONORS & AWARDS ASSESSMENT
+  assessment += `\n\n==================================================\n`;
+  assessment += `🏅 HONORS & AWARDS ASSESSMENT: ${awardsGrade} (${awardsPercent}%) 🏅\n`;
+  assessment += `==================================================\n`;
   if (awardsGrade.startsWith('A')) {
-    assessment += `Your achievements${profile.hasNationalAwards ? ', including national-level recognition,' : ''} set you apart from many applicants. `;
-    assessment += `These accomplishments demonstrate excellence and will be viewed positively by admission committees. `;
-  } else if (awardsGrade.startsWith('B')) {
-    assessment += `You have some notable accomplishments that strengthen your application. `;
+    assessment += `Your achievements${profile.hasNationalAwards ? ', including national-level recognition,' : ''} are impressive and will strengthen your application. `;
     if (!profile.hasNationalAwards) {
-      assessment += `Pursuing recognition at higher levels (state or national) would further distinguish your profile. `;
+      assessment += `For Ivy League and similar institutions, national awards are often expected - this gap may impact your competitiveness. `;
+    }
+  } else if (awardsGrade.startsWith('B')) {
+    assessment += `Your accomplishments are good but lack the distinction needed for the most competitive schools. `;
+    if (!profile.hasNationalAwards && !profile.hasStateAwards) {
+      assessment += `The absence of recognition beyond the local level is a notable weakness for selective admissions. `;
     }
   } else {
-    assessment += `This is an area for potential growth in your application. `;
-    assessment += `Consider participating in competitions or seeking recognition related to your academic or extracurricular interests. `;
-    assessment += `Even school-level awards demonstrate achievement beyond regular coursework. `;
+    assessment += `This area is significantly underdeveloped. Competitive applicants to selective colleges typically have multiple recognitions across different levels. `;
+    assessment += `The lack of formal recognition puts you at a disadvantage against applicants with demonstrated excellence. `;
   }
   
-  // Major-specific assessment
-  assessment += `\n\nMAJOR PREPARATION: `;
+  assessment += `\n\nStrengths: `;
+  if (profile.hasNationalAwards) assessment += `National-level recognition - a significant advantage. `;
+  if (profile.hasStateAwards) assessment += `State/regional awards demonstrating broader achievement. `;
+  if (profile.hasMajorRelatedAwards) assessment += `Awards relevant to intended major. `;
+  
+  assessment += `\n\nWeaknesses: `;
+  if (!profile.hasNationalAwards) assessment += `Lack of national-level recognition. `;
+  if (!profile.hasStateAwards) assessment += `No state/regional achievements. `;
+  if (profile.awardCount < 2) assessment += `Limited formal recognition. `;
+  if (!profile.hasMajorRelatedAwards) assessment += `No awards related to intended major. `;
+  
+  // SECTION 5: MAJOR FIT ASSESSMENT
+  assessment += `\n\n==================================================\n`;
+  assessment += `🔍 MAJOR & CAREER FIT ASSESSMENT 🔍\n`;
+  assessment += `==================================================\n`;
   if (major) {
-    assessment += `For your interest in ${major}, `;
+    assessment += `Intended Major: ${major}\n\n`;
     
     // Determine if they have good preparation for their stated major
     const majorLower = major.toLowerCase();
-    let hasGoodPreparation = false;
+    let majorFitScore = 0;
     
-    if ((majorLower.includes("comput") || majorLower.includes("engineer") || majorLower.includes("math")) && 
-        (profile.academicGrade.startsWith('A') || profile.academicGrade.startsWith('B'))) {
-      hasGoodPreparation = true;
+    // Calculate major fit score
+    if ((majorLower.includes("comput") || majorLower.includes("engineer") || majorLower.includes("math"))) {
+      if (profile.academicGrade.startsWith('A')) majorFitScore += 2;
+      else if (profile.academicGrade.startsWith('B')) majorFitScore += 1;
+      
+      if (profile.hasMajorRelatedActivities) majorFitScore += 2;
+      if (profile.hasMajorRelatedAwards) majorFitScore += 1;
+    } else if ((majorLower.includes("business") || majorLower.includes("finance") || majorLower.includes("econ"))) {
+      if (profile.hasLeadershipRoles) majorFitScore += 2;
+      if (profile.hasMajorRelatedActivities) majorFitScore += 2;
+      if (profile.extracurricularCount >= 3) majorFitScore += 1;
+    } else if ((majorLower.includes("art") || majorLower.includes("music") || majorLower.includes("drama"))) {
+      if (profile.hasMajorRelatedActivities) majorFitScore += 3;
+      if (profile.hasMajorRelatedAwards) majorFitScore += 2;
     }
     
-    if (hasGoodPreparation) {
-      assessment += `your academic preparation appears strong. Continue to seek experiences that deepen your understanding and demonstrate genuine interest in this field. `;
+    // Provide major-specific assessment
+    if (majorFitScore >= 4) {
+      assessment += `Your profile shows strong alignment with your intended major. You've demonstrated both academic preparation and practical engagement in this field.\n\n`;
+    } else if (majorFitScore >= 2) {
+      assessment += `Your profile shows moderate alignment with your intended major. Selective programs will want to see more concrete evidence of your interest and aptitude in this field.\n\n`;
     } else {
-      assessment += `you would benefit from additional preparation through relevant coursework, projects, or activities that connect to this field. Demonstrating sustained interest in your chosen major strengthens your application. `;
+      assessment += `Your profile currently shows limited connection to your intended major. Competitive applicants typically demonstrate substantive engagement with their field of interest through coursework, activities, and achievements.\n\n`;
+    }
+    
+    // Major-specific advice
+    if (majorLower.includes("comput") || majorLower.includes("software") || majorLower.includes("program")) {
+      assessment += `For Computer Science/Programming: Top programs look for coding projects, hackathon participation, math competition awards, and advanced math/CS coursework. Competition is extremely high for these majors at selective schools.\n\n`;
+    } else if (majorLower.includes("engineer")) {
+      assessment += `For Engineering: Strong math/science grades, research experience, and hands-on projects are essential. The type of engineering matters - biomedical and computer engineering are typically more competitive than other fields.\n\n`;
+    } else if (majorLower.includes("business")) {
+      assessment += `For Business: Leadership experience, entrepreneurial initiatives, and quantitative skills are highly valued. Top business programs like Wharton, Stern, and Ross often have acceptance rates below 10%.\n\n`;
     }
   } else {
-    assessment += `If you're undecided about your major, that's perfectly acceptable. Many schools value intellectual curiosity across disciplines. Explore various subjects that interest you to help clarify your academic direction. `;
+    assessment += `No major preference indicated. While this is acceptable, having a clear direction can strengthen your application, particularly for specialized programs. Undecided applicants should demonstrate intellectual curiosity across multiple disciplines.\n\n`;
   }
   
-  // Overall assessment and college fit
-  assessment += `\n\nOVERALL OUTLOOK: Based on your complete profile (${overallGrade}), `;
+  // SECTION 6: OVERALL ASSESSMENT
+  assessment += `==================================================\n`;
+  assessment += `📝 OVERALL ASSESSMENT: ${overallGrade} (${overallPercent}%) 📝\n`;
+  assessment += `==================================================\n`;
   
   if (overallGrade.startsWith('A')) {
-    assessment += `you're well-positioned for a wide range of colleges, including selective institutions. Focus on crafting compelling essays and securing strong recommendations to complement your impressive achievements. With thoughtful applications, you have strong prospects at competitive schools, though always maintain a balanced college list as even top applicants face uncertainty at the most selective institutions.`;
+    assessment += `You have a strong profile that will be competitive at many institutions, though top-10 schools remain reach options given their sub-7% acceptance rates. `;
+    assessment += `Even applicants with perfect credentials face uncertainty at schools like Harvard, Stanford, and MIT where qualified applicants far exceed available spots. `;
+    assessment += `Focus on crafting compelling essays and securing strong recommendations to complement your impressive achievements. `;
+    assessment += `Build a balanced college list with 2-3 reach schools, 3-4 target schools, and 2-3 safety schools.`;
   } else if (overallGrade.startsWith('B')) {
-    assessment += `you have a solid foundation with particular strengths that make you competitive for many colleges. Focus on highlighting these strengths while addressing areas for improvement in your applications. A balanced college list with a range of selectivity levels will give you good options. By implementing the specific recommendations provided, you could significantly enhance your prospects, particularly at your target schools.`;
+    assessment += `Your profile shows strengths but has notable weaknesses that will limit competitiveness at highly selective schools (sub-15% acceptance rate). `;
+    assessment += `Top-30 schools would be reach options, with more realistic prospects at schools with 15-30% acceptance rates if you address key weaknesses. `;
+    assessment += `Focus on highlighting your strengths while addressing areas for improvement in your applications. `;
+    assessment += `Be strategic with your college list, including primarily target and safety schools with 1-2 reach options.`;
   } else {
-    assessment += `you should focus on strengthening key areas of your application while creating a college list that includes schools where your current profile will be competitive. Don't be discouraged—many excellent colleges consider the full context of applicants and value potential and personal qualities beyond metrics. By addressing the specific recommendations provided and applying to a strategic range of schools, you can find excellent college matches that will support your academic and personal growth.`;
+    assessment += `Your current profile has significant gaps compared to competitive applicants for selective colleges. `;
+    assessment += `Focus on schools with acceptance rates above 40% where your application will receive more favorable consideration. `;
+    assessment += `Consider community college with transfer plans, or gap year to strengthen your profile if aiming for more selective institutions. `;
+    assessment += `For immediate applications, prioritize finding schools where your specific strengths align with institutional priorities.`; 
   }
   
   return assessment;

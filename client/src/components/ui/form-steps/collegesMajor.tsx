@@ -9,6 +9,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface CollegesMajorProps {
   formData: AdmissionData;
@@ -19,6 +20,7 @@ interface CollegesMajorProps {
 
 const collegesMajorSchema = z.object({
   major: z.string().min(1, "Major is required"),
+  residency: z.enum(["in-state", "out-of-state", "international"]).default("out-of-state"),
 });
 
 export function CollegesMajor({ formData, setFormData, onNext, onPrev }: CollegesMajorProps) {
@@ -26,6 +28,7 @@ export function CollegesMajor({ formData, setFormData, onNext, onPrev }: College
     resolver: zodResolver(collegesMajorSchema),
     defaultValues: {
       major: formData.major,
+      residency: formData.residency || "out-of-state",
     },
   });
 
@@ -45,6 +48,7 @@ export function CollegesMajor({ formData, setFormData, onNext, onPrev }: College
       ...prev,
       colleges: updatedColleges,
       major: values.major,
+      residency: values.residency,
     }));
     
     onNext();
@@ -131,6 +135,51 @@ export function CollegesMajor({ formData, setFormData, onNext, onPrev }: College
                         placeholder="e.g., Computer Science, Biology, Economics" 
                         {...field} 
                       />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            
+            <div className="mb-6">
+              <FormField
+                control={form.control}
+                name="residency"
+                render={({ field }) => (
+                  <FormItem className="space-y-3">
+                    <FormLabel>Residency Status</FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        className="flex flex-col space-y-1"
+                      >
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value="in-state" />
+                          </FormControl>
+                          <FormLabel className="font-normal">
+                            In-State Student
+                          </FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value="out-of-state" />
+                          </FormControl>
+                          <FormLabel className="font-normal">
+                            Out-of-State Student
+                          </FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value="international" />
+                          </FormControl>
+                          <FormLabel className="font-normal">
+                            International Student
+                          </FormLabel>
+                        </FormItem>
+                      </RadioGroup>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
