@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
   admissionDataSchema, analysisResultSchema, 
-  loginSchema, registerSchema, type User 
+  loginSchema, registerSchema, verificationSchema, type User 
 } from "@shared/schema";
 import { z } from "zod";
 import fetch from "node-fetch";
@@ -71,6 +71,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { confirmPassword, ...userDataToSave } = userData;
       const newUser = await storage.createUser(userDataToSave);
       
+      // Generate a verification code
+      const verificationCode = await storage.createVerificationCode(userData.email);
+      
+      // In a real app, we would send this code via email
+      // For our demo, we'll just return the code in the response
+      console.log(`Verification code for ${userData.email}: ${verificationCode}`);
+      
       // Establish session
       req.session.user = newUser;
       req.session.authenticated = true;
@@ -81,7 +88,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: newUser.id,
           username: newUser.username,
           email: newUser.email
-        }
+        },
+        verificationCode,
+        message: "Please verify your email with the verification code (check your console for the code)."
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -119,16 +128,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Check if email is verified
+      const isVerified = await storage.getUserVerificationStatus(user.email);
+      
       // Establish session
       req.session.user = user;
       req.session.authenticated = true;
+      
+      // If the user isn't verified, indicate we need verification
+      if (!isVerified) {
+        // Generate a new verification code
+        const verificationCode = await storage.createVerificationCode(user.email);
+        console.log(`Verification code for ${user.email}: ${verificationCode}`);
+        
+        return res.json({
+          success: true,
+          needsVerification: true,
+          user: {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            isVerified: false
+          },
+          message: "Please verify your email to continue."
+        });
+      }
       
       res.json({
         success: true,
         user: {
           id: user.id,
           username: user.username,
-          email: user.email
+          email: user.email,
+          isVerified: true
         }
       });
     } catch (error) {
@@ -150,6 +182,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "Login failed" 
         });
       }
+    }
+  });
+  
+  // Email verification endpoint
+  app.post("/api/verify-email", async (req, res) => {
+    try {
+      const verificationData = verificationSchema.parse(req.body);
+      
+      // Check if the verification code is valid
+      const isVerified = await storage.verifyEmail(verificationData.email, verificationData.code);
+      
+      if (!isVerified) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid verification code"
+        });
+      }
+      
+      // Update the user's verification status if they're logged in
+      if (req.session.authenticated && req.session.user && req.session.user.email === verificationData.email) {
+        req.session.user.isVerified = true;
+      }
+      
+      res.json({
+        success: true,
+        message: "Email verified successfully"
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const fieldErrors = error.errors.map(err => ({
+          path: err.path.join('.'),
+          message: err.message
+        }));
+        
+        res.status(400).json({
+          success: false,
+          message: "Validation error",
+          errors: fieldErrors
+        });
+      } else {
+        console.error("Verification error:", error);
+        res.status(500).json({
+          success: false,
+          message: "Could not verify email"
+        });
+      }
+    }
+  });
+  
+  // Resend verification code endpoint
+  app.post("/api/resend-verification", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: "Email is required"
+        });
+      }
+      
+      // Generate a new verification code
+      const verificationCode = await storage.createVerificationCode(email);
+      
+      // In a real app, we would send this code via email
+      // For our demo, we'll just return the code in the response
+      console.log(`New verification code for ${email}: ${verificationCode}`);
+      
+      res.json({
+        success: true,
+        verificationCode,
+        message: "Verification code sent"
+      });
+    } catch (error) {
+      console.error("Resend verification error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Could not send verification code"
+      });
     }
   });
   
@@ -185,7 +296,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       user: {
         id: req.session.user.id,
         username: req.session.user.username,
-        email: req.session.user.email
+        email: req.session.user.email,
+        isVerified: req.session.user.isVerified || false
       }
     });
   });

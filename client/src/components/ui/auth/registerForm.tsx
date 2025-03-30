@@ -9,6 +9,8 @@ import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
+import { EmailVerification } from "./emailVerification";
+import { useAuth } from "@/hooks/use-auth";
 
 const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
@@ -28,7 +30,11 @@ interface RegisterFormProps {
 
 export function RegisterForm({ onSuccess }: RegisterFormProps) {
   const { toast } = useToast();
+  const { updateVerificationStatus } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [showVerification, setShowVerification] = useState(false);
+  const [registeredUser, setRegisteredUser] = useState<any>(null);
+  const [registeredEmail, setRegisteredEmail] = useState<string>("");
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -43,7 +49,7 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
   async function onSubmit(values: RegisterFormValues) {
     setIsLoading(true);
     try {
-      const response = await apiRequest<{ success: boolean; user: any; message?: string }>({
+      const response = await apiRequest<{ success: boolean; user: any; message?: string; verificationCode?: string }>({
         url: "/api/register",
         method: "POST",
         body: values,
@@ -52,9 +58,11 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
       if (response.success) {
         toast({
           title: "Registration successful",
-          description: `Welcome, ${response.user.username}!`,
+          description: "Please verify your email to continue",
         });
-        onSuccess(response.user);
+        setRegisteredUser(response.user);
+        setRegisteredEmail(values.email);
+        setShowVerification(true);
       } else {
         toast({
           variant: "destructive",
@@ -72,6 +80,39 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
     } finally {
       setIsLoading(false);
     }
+  }
+  
+  const handleVerificationSuccess = () => {
+    toast({
+      title: "Email verified",
+      description: "Your account is now fully activated",
+    });
+    updateVerificationStatus(true);
+    if (registeredUser) {
+      onSuccess({
+        ...registeredUser,
+        isVerified: true
+      });
+    }
+  };
+
+  if (showVerification) {
+    return (
+      <Card className="w-full max-w-md mx-auto">
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold">Verify your email</CardTitle>
+          <CardDescription>
+            We've sent a verification code to your email. Please enter it below to verify your account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <EmailVerification 
+            email={registeredEmail} 
+            onVerificationSuccess={handleVerificationSuccess} 
+          />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (

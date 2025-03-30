@@ -2,12 +2,13 @@ import { pgTable, text, serial, integer, boolean, jsonb } from "drizzle-orm/pg-c
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Enhanced user schema with email
+// Enhanced user schema with email and verification
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  isVerified: boolean("is_verified").notNull().default(false),
   createdAt: text("created_at").notNull().default(new Date().toISOString()),
 });
 
@@ -41,9 +42,15 @@ export const registerSchema = z.object({
   path: ["confirmPassword"],
 });
 
+export const verificationSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  code: z.string().length(6, "Verification code must be 6 digits"),
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginSchema>;
 export type RegisterUser = z.infer<typeof registerSchema>;
+export type VerificationData = z.infer<typeof verificationSchema>;
 export type User = typeof users.$inferSelect;
 export type SavedResult = typeof savedResults.$inferSelect;
 

@@ -9,6 +9,8 @@ import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
+import { EmailVerification } from "./emailVerification";
+import { useAuth } from "@/hooks/use-auth";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -23,7 +25,11 @@ interface LoginFormProps {
 
 export function LoginForm({ onSuccess }: LoginFormProps) {
   const { toast } = useToast();
+  const { updateVerificationStatus } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [showVerification, setShowVerification] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+  const [loginUser, setLoginUser] = useState<any>(null);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -36,23 +42,41 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   async function onSubmit(values: LoginFormValues) {
     setIsLoading(true);
     try {
-      const response = await apiRequest<{ success: boolean; user: any }>({
+      const response = await apiRequest<{ 
+        success: boolean; 
+        user: any; 
+        needsVerification?: boolean;
+        message?: string;
+      }>({
         url: "/api/login",
         method: "POST",
         body: values,
       });
 
       if (response.success) {
-        toast({
-          title: "Login successful",
-          description: `Welcome back, ${response.user.username}!`,
-        });
-        onSuccess(response.user);
+        if (response.needsVerification) {
+          toast({
+            title: "Verification required",
+            description: "Please verify your email to continue",
+          });
+          setUserEmail(values.email);
+          setLoginUser(response.user);
+          setShowVerification(true);
+        } else {
+          toast({
+            title: "Login successful",
+            description: `Welcome back, ${response.user.username}!`,
+          });
+          
+          // Ensure verification status is reflected in auth context
+          updateVerificationStatus(response.user.isVerified || false);
+          onSuccess(response.user);
+        }
       } else {
         toast({
           variant: "destructive",
           title: "Login failed",
-          description: "Invalid email or password",
+          description: response.message || "Invalid email or password",
         });
       }
     } catch (error: any) {
@@ -64,6 +88,39 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     } finally {
       setIsLoading(false);
     }
+  }
+  
+  const handleVerificationSuccess = () => {
+    toast({
+      title: "Email verified",
+      description: "Your account is now fully activated",
+    });
+    updateVerificationStatus(true);
+    if (loginUser) {
+      onSuccess({
+        ...loginUser,
+        isVerified: true
+      });
+    }
+  };
+
+  if (showVerification) {
+    return (
+      <Card className="w-full max-w-md mx-auto">
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold">Verify your email</CardTitle>
+          <CardDescription>
+            We've sent a verification code to your email. Please enter it below to verify your account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <EmailVerification 
+            email={userEmail} 
+            onVerificationSuccess={handleVerificationSuccess} 
+          />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (

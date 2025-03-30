@@ -15,6 +15,9 @@ export interface IStorage {
   saveAnalysisResult(requestId: string, result: AnalysisResult): Promise<void>;
   getUserResults(userId: number): Promise<SavedResult[]>;
   saveUserResult(userId: number, formData: AdmissionData, resultData: AnalysisResult): Promise<SavedResult>;
+  createVerificationCode(email: string): Promise<string>;
+  verifyEmail(email: string, code: string): Promise<boolean>;
+  getUserVerificationStatus(email: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -22,6 +25,8 @@ export class MemStorage implements IStorage {
   private analysisRequests: Map<string, AdmissionData>;
   private analysisResults: Map<string, AnalysisResult>;
   private savedUserResults: Map<number, SavedResult[]>;
+  private verificationCodes: Map<string, string>; // email -> code
+  private verifiedEmails: Set<string>; // Set of verified emails
   currentId: number;
   currentResultId: number;
   
@@ -30,6 +35,8 @@ export class MemStorage implements IStorage {
     this.analysisRequests = new Map();
     this.analysisResults = new Map();
     this.savedUserResults = new Map();
+    this.verificationCodes = new Map();
+    this.verifiedEmails = new Set();
     this.currentId = 1;
     this.currentResultId = 1;
   }
@@ -63,6 +70,7 @@ export class MemStorage implements IStorage {
     const user: User = { 
       ...insertUser, 
       id,
+      isVerified: false,
       createdAt: new Date().toISOString()
     };
     this.users.set(id, user);
@@ -105,6 +113,49 @@ export class MemStorage implements IStorage {
     userResults.push(savedResult);
     
     return savedResult;
+  }
+  
+  // Generate a 6-digit verification code for email verification
+  async createVerificationCode(email: string): Promise<string> {
+    // Generate a random 6-digit code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    this.verificationCodes.set(email, verificationCode);
+    return verificationCode;
+  }
+  
+  // Verify an email with a verification code
+  async verifyEmail(email: string, code: string): Promise<boolean> {
+    const storedCode = this.verificationCodes.get(email);
+    
+    if (storedCode && storedCode === code) {
+      // Mark email as verified
+      this.verifiedEmails.add(email);
+      
+      // Update user's isVerified status
+      const user = await this.getUserByEmail(email);
+      if (user) {
+        user.isVerified = true;
+        this.users.set(user.id, user);
+      }
+      
+      // Clean up code after successful verification
+      this.verificationCodes.delete(email);
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // Check if an email is verified
+  async getUserVerificationStatus(email: string): Promise<boolean> {
+    // First check in the user records (which is the source of truth)
+    const user = await this.getUserByEmail(email);
+    if (user) {
+      return user.isVerified;
+    }
+    
+    // Fallback to the verifiedEmails set
+    return this.verifiedEmails.has(email);
   }
 }
 
