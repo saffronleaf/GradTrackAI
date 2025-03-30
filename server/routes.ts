@@ -1102,22 +1102,11 @@ function generateOverallAssessment(profile: any): string {
   const awardsPercent = letterToPercent(awardsGrade);
   const overallPercent = letterToPercent(overallGrade);
   
-  // Create multiple clearly separated sections with letter grades and percentages
-  let assessment = `📊 COLLEGE ADMISSION PROFILE ASSESSMENT 📊\n\n`;
+  // Create a more concise summary
+  let assessment = '';
   
-  // SECTION 1: SUMMARY OF GRADES
-  assessment += `==================================================\n`;
-  assessment += `💯 PROFILE GRADES 💯\n`;
-  assessment += `==================================================\n`;
-  assessment += `ACADEMIC PROFILE: ${academicGrade} (${academicPercent}%)\n`;
-  assessment += `EXTRACURRICULAR INVOLVEMENT: ${extracurricularGrade} (${extracurricularPercent}%)\n`;
-  assessment += `HONORS & AWARDS: ${awardsGrade} (${awardsPercent}%)\n`;
-  assessment += `OVERALL EVALUATION: ${overallGrade} (${overallPercent}%)\n\n`;
-  
-  // SECTION 2: ACADEMIC ASSESSMENT
-  assessment += `==================================================\n`;
-  assessment += `📚 ACADEMIC ASSESSMENT: ${academicGrade} (${academicPercent}%) 📚\n`;
-  assessment += `==================================================\n`;
+  // Start with overall competitiveness assessment
+  assessment += `Based on your profile with an overall grade of ${overallGrade}, here's an analysis of your college admission prospects:\n\n`;
   if (academicGrade.startsWith('A')) {
     assessment += `Your academic record is strong with a ${profile.gpa} GPA${profile.apCourses ? ` and ${profile.apCourses} AP/advanced courses` : ''}. `;
     if (profile.sat >= 1400 || profile.act >= 31) {
@@ -1151,10 +1140,8 @@ function generateOverallAssessment(profile: any): string {
   if (profile.sat === 0 && profile.act === 0) assessment += `No standardized test scores provided. `;
   if (profile.apCourses < 5) assessment += `Limited advanced coursework. `;
   
-  // SECTION 3: EXTRACURRICULAR ASSESSMENT
-  assessment += `\n\n==================================================\n`;
-  assessment += `🏆 EXTRACURRICULAR ASSESSMENT: ${extracurricularGrade} (${extracurricularPercent}%) 🏆\n`;
-  assessment += `==================================================\n`;
+  // Extracurricular assessment
+  assessment += `\n\nExtracurricular Activities (Grade: ${extracurricularGrade}):\n`;
   if (extracurricularGrade.startsWith('A')) {
     assessment += `Your involvement in ${profile.extracurricularCount} activities${profile.hasLeadershipRoles ? ' with leadership positions' : ''} demonstrates commitment and initiative. `;
     if (!profile.hasLeadershipRoles) {
@@ -1184,10 +1171,8 @@ function generateOverallAssessment(profile: any): string {
   if (profile.extracurricularCount < 3) assessment += `Limited extracurricular engagement. `;
   if (!profile.hasSignificantTimeCommitment) assessment += `No activities with significant time commitment. `;
   
-  // SECTION 4: HONORS & AWARDS ASSESSMENT
-  assessment += `\n\n==================================================\n`;
-  assessment += `🏅 HONORS & AWARDS ASSESSMENT: ${awardsGrade} (${awardsPercent}%) 🏅\n`;
-  assessment += `==================================================\n`;
+  // Honors and awards assessment
+  assessment += `\n\nHonors & Awards (Grade: ${awardsGrade}):\n`;
   if (awardsGrade.startsWith('A')) {
     assessment += `Your achievements${profile.hasNationalAwards ? ', including national-level recognition,' : ''} are impressive and will strengthen your application. `;
     if (!profile.hasNationalAwards) {
@@ -1214,12 +1199,10 @@ function generateOverallAssessment(profile: any): string {
   if (profile.awardCount < 2) assessment += `Limited formal recognition. `;
   if (!profile.hasMajorRelatedAwards) assessment += `No awards related to intended major. `;
   
-  // SECTION 5: MAJOR FIT ASSESSMENT
-  assessment += `\n\n==================================================\n`;
-  assessment += `🔍 MAJOR & CAREER FIT ASSESSMENT 🔍\n`;
-  assessment += `==================================================\n`;
+  // Major fit assessment
+  assessment += `\n\nMajor Compatibility:\n`;
   if (major) {
-    assessment += `Intended Major: ${major}\n\n`;
+    assessment += `Your intended major is ${major}. `;
     
     // Determine if they have good preparation for their stated major
     const majorLower = major.toLowerCase();
@@ -1262,10 +1245,8 @@ function generateOverallAssessment(profile: any): string {
     assessment += `No major preference indicated. While this is acceptable, having a clear direction can strengthen your application, particularly for specialized programs. Undecided applicants should demonstrate intellectual curiosity across multiple disciplines.\n\n`;
   }
   
-  // SECTION 6: OVERALL ASSESSMENT
-  assessment += `==================================================\n`;
-  assessment += `📝 OVERALL ASSESSMENT: ${overallGrade} (${overallPercent}%) 📝\n`;
-  assessment += `==================================================\n`;
+  // Overall strategy and recommendations
+  assessment += `\n\nRecommended Strategy:\n`;
   
   if (overallGrade.startsWith('A')) {
     assessment += `You have a strong profile that will be competitive at many institutions, though top-10 schools remain reach options given their sub-7% acceptance rates. `;
