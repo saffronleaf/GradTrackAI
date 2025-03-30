@@ -9,6 +9,7 @@ import { z } from "zod";
 import fetch from "node-fetch";
 import session from "express-session";
 import MemoryStore from "memorystore";
+import { sendVerificationEmail, isEmailServiceAvailable } from "./email";
 
 declare module 'express-session' {
   interface SessionData {
@@ -74,14 +75,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate a verification code
       const verificationCode = await storage.createVerificationCode(userData.email);
       
-      // In a real app, we would send this code via email
-      // For our demo, we'll just return the code in the response
-      console.log(`Verification code for ${userData.email}: ${verificationCode}`);
+      // Send verification email if email service is available
+      if (isEmailServiceAvailable()) {
+        await sendVerificationEmail(userData.email, verificationCode);
+        console.log(`Verification email sent to ${userData.email}`);
+      } else {
+        // If email service is not available, log the code to console
+        console.log(`Verification code for ${userData.email}: ${verificationCode}`);
+      }
       
       // Establish session
       req.session.user = newUser;
       req.session.authenticated = true;
       
+      const responseMessage = isEmailServiceAvailable()
+        ? "Please check your email for a verification code to complete your registration."
+        : "Please verify your email with the verification code (check your console for the code).";
+        
       res.status(201).json({
         success: true,
         user: {
@@ -89,8 +99,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           username: newUser.username,
           email: newUser.email
         },
-        verificationCode,
-        message: "Please verify your email with the verification code (check your console for the code)."
+        verificationCode: isEmailServiceAvailable() ? undefined : verificationCode,
+        message: responseMessage
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -139,8 +149,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isVerified) {
         // Generate a new verification code
         const verificationCode = await storage.createVerificationCode(user.email);
-        console.log(`Verification code for ${user.email}: ${verificationCode}`);
         
+        // Send verification email if email service is available
+        if (isEmailServiceAvailable()) {
+          await sendVerificationEmail(user.email, verificationCode);
+          console.log(`Verification email sent to ${user.email}`);
+        } else {
+          // If email service is not available, log the code to console
+          console.log(`Verification code for ${user.email}: ${verificationCode}`);
+        }
+        
+        const responseMessage = isEmailServiceAvailable()
+          ? "Please check your email for a verification code to complete your registration."
+          : "Please verify your email to continue. Check the console for the verification code.";
+          
         return res.json({
           success: true,
           needsVerification: true,
@@ -150,7 +172,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             email: user.email,
             isVerified: false
           },
-          message: "Please verify your email to continue."
+          verificationCode: isEmailServiceAvailable() ? undefined : verificationCode,
+          message: responseMessage
         });
       }
       
@@ -246,14 +269,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate a new verification code
       const verificationCode = await storage.createVerificationCode(email);
       
-      // In a real app, we would send this code via email
-      // For our demo, we'll just return the code in the response
-      console.log(`New verification code for ${email}: ${verificationCode}`);
+      // Send verification email if email service is available
+      if (isEmailServiceAvailable()) {
+        await sendVerificationEmail(email, verificationCode);
+        console.log(`Verification email sent to ${email}`);
+      } else {
+        // If email service is not available, log the code to console
+        console.log(`New verification code for ${email}: ${verificationCode}`);
+      }
+      
+      const responseMessage = isEmailServiceAvailable()
+        ? "Verification code sent to your email."
+        : "Verification code sent. Check the console for the code.";
       
       res.json({
         success: true,
-        verificationCode,
-        message: "Verification code sent"
+        verificationCode: isEmailServiceAvailable() ? undefined : verificationCode,
+        message: responseMessage
       });
     } catch (error) {
       console.error("Resend verification error:", error);
