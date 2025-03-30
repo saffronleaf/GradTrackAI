@@ -25,11 +25,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           requestId,
           result
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error("DeepSeek API error:", error);
+        
+        // Send a more detailed error message to the client
+        const errorMessage = error.message || "Failed to analyze with AI service. Please try again.";
+        
         res.status(500).json({ 
           success: false, 
-          message: "Failed to analyze with AI service. Please try again." 
+          message: errorMessage
         });
       }
     } catch (error) {
@@ -59,62 +63,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }
 
 async function analyzeWithDeepSeek(formData: any) {
-  const apiKey = process.env.DEEPSEEK_API_KEY || "sk-fcc1454100854eaeb19c0a0ebe5eedd9";
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("DeepSeek API key is missing. Please set the DEEPSEEK_API_KEY environment variable.");
+  }
   
   // Create a prompt based on the form data
   const prompt = createPromptFromFormData(formData);
   
-  const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: "deepseek-chat",
-      messages: [
-        {
-          role: "system",
-          content: "You are a college admissions advisor with extensive knowledge of the college application process and admissions criteria. Your task is to analyze a student's profile and provide realistic admissions chances and personalized recommendations."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      temperature: 0.7,
-      response_format: { type: "json_object" }
-    })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`DeepSeek API error: ${response.status} ${errorText}`);
-  }
-
-  const data = await response.json();
-  
   try {
-    // Parse the response content (which should be JSON string)
-    const analysisContent = JSON.parse(data.choices[0].message.content);
+    const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [
+          {
+            role: "system",
+            content: "You are a college admissions advisor with extensive knowledge of the college application process and admissions criteria. Your task is to analyze a student's profile and provide realistic admissions chances and personalized recommendations."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        response_format: { type: "json_object" }
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error("DeepSeek API error response:", errorData);
+      
+      let errorMessage = `DeepSeek API returned status ${response.status}`;
+      
+      // Handle common error cases with user-friendly messages
+      if (response.status === 402) {
+        errorMessage = "API usage limit reached. Please contact support to upgrade your plan.";
+      } else if (response.status === 401) {
+        errorMessage = "Invalid API key. Please check your credentials.";
+      } else if (response.status === 429) {
+        errorMessage = "Too many requests. Please try again later.";
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json() as any;
     
-    // Validate and structure the response
-    const result = {
-      overallAssessment: analysisContent.overallAssessment || "Based on your profile, you have strengths and areas for improvement in your college application.",
-      collegeChances: analysisContent.collegeChances.map((college: any) => ({
-        name: college.name,
-        chance: college.chance,
-        color: getColorForChance(college.chance),
-        feedback: college.feedback
-      })),
-      improvementPlan: analysisContent.improvementPlan || []
-    };
-    
-    return result;
+    try {
+      // Parse the response content (which should be JSON string)
+      const analysisContent = JSON.parse(data.choices[0].message.content);
+      
+      // Validate and structure the response
+      const result = {
+        overallAssessment: analysisContent.overallAssessment || "Based on your profile, you have strengths and areas for improvement in your college application.",
+        collegeChances: analysisContent.collegeChances.map((college: any) => ({
+          name: college.name,
+          chance: college.chance,
+          color: getColorForChance(college.chance),
+          feedback: college.feedback
+        })),
+        improvementPlan: analysisContent.improvementPlan || []
+      };
+      
+      return result;
+    } catch (error) {
+      console.error("Error parsing DeepSeek response:", error);
+      // Fallback response if parsing fails
+      return createFallbackResponse(formData);
+    }
   } catch (error) {
-    console.error("Error parsing DeepSeek response:", error);
-    // Fallback response if parsing fails
-    return createFallbackResponse(formData);
+    console.error("DeepSeek API request error:", error);
+    throw error;
   }
 }
 

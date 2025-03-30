@@ -54,20 +54,31 @@ export function AdmissionForm() {
         setFormSubmitted(true);
         window.scrollTo(0, 0);
       } else {
+        // Display the specific error message from the server
+        const errorMessage = data.message || "Failed to analyze your profile. Please try again.";
         toast({
-          title: "Error",
-          description: data.message || "Failed to analyze your profile. Please try again.",
+          title: "Analysis Error",
+          description: errorMessage,
           variant: "destructive",
         });
+        
+        console.error("API error response:", data);
       }
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      console.error("Form submission error:", error);
+      let errorMessage = "Failed to connect to the server. Please try again later.";
+      
+      // Check if we have a more specific error message
+      if (error?.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
-        title: "Error",
-        description: "Failed to connect to the server. Please try again later.",
+        title: "Analysis Error",
+        description: errorMessage,
         variant: "destructive",
       });
-      console.error("Form submission error:", error);
     },
   });
 
