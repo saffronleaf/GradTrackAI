@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { CheckCircle, Award, Book, School, Lightbulb, AlertTriangle, TrendingUp } from "lucide-react";
 import { type AnalysisResult } from "@shared/schema";
 
 interface ResultsDisplayProps {
@@ -13,30 +15,34 @@ export function ResultsDisplay({ results, onReset }: ResultsDisplayProps) {
   const getColorClass = (color: string) => {
     switch (color) {
       case "red-500":
-        return "bg-red-100 text-red-800";
+        return "bg-red-100 text-red-800 border-red-200";
       case "yellow-500":
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-yellow-100 text-yellow-800 border-yellow-200";
       case "green-500":
-        return "bg-green-100 text-green-800";
+        return "bg-green-100 text-green-800 border-green-200";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-gray-100 text-gray-800 border-gray-200";
     }
   };
 
+  const getChanceIcon = (chance: string) => {
+    if (chance.includes("High")) return <TrendingUp className="h-5 w-5 text-green-500" />;
+    if (chance.includes("Medium")) return <Lightbulb className="h-5 w-5 text-yellow-500" />;
+    return <AlertTriangle className="h-5 w-5 text-red-500" />;
+  };
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-3xl mx-auto">
       {/* Fallback mode notification */}
       {results.isFallbackMode && (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md">
-          <div className="flex items-start">
+        <div className="bg-yellow-50 border border-yellow-200 p-5 rounded-lg shadow-sm">
+          <div className="flex items-start gap-3">
             <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
+              <AlertTriangle className="h-6 w-6 text-yellow-500" />
             </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-yellow-800">Using Simulated Analysis</h3>
-              <div className="mt-2 text-sm text-yellow-700">
+            <div>
+              <h3 className="text-sm font-semibold text-yellow-800">Using Simulated Analysis</h3>
+              <div className="mt-1 text-sm text-yellow-700">
                 <p>{results.fallbackNote || "The DeepSeek AI analysis is currently unavailable. Showing a simulated analysis based on your input."}</p>
               </div>
             </div>
@@ -45,29 +51,49 @@ export function ResultsDisplay({ results, onReset }: ResultsDisplayProps) {
       )}
       
       {/* Overall Assessment Card */}
-      <Card className="bg-white shadow-sm rounded-lg p-6 border-l-4 border-primary">
-        <CardContent className="p-0">
-          <h2 className="text-xl font-semibold mb-4 text-gray-800">Overall Assessment</h2>
-          <p className="text-gray-700">{results.overallAssessment}</p>
-        </CardContent>
-      </Card>
+      <div className="relative">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary/80 to-primary rounded-t-lg"></div>
+        <Card className="bg-white shadow-md rounded-lg border border-gray-200 overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-primary/10 to-transparent pb-4">
+            <div className="flex items-center gap-3">
+              <School className="h-6 w-6 text-primary" />
+              <CardTitle className="text-xl text-gray-800">Your College Admissions Assessment</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="prose prose-sm max-w-none">
+              <p className="text-gray-700 leading-relaxed">{results.overallAssessment}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* College Admission Chances Card */}
-      <Card className="bg-white shadow-sm rounded-lg p-6">
-        <CardContent className="p-0">
-          <h2 className="text-xl font-semibold mb-6 text-gray-800">College Admission Chances</h2>
-          
-          <div className="space-y-4">
+      <Card className="bg-white shadow-md rounded-lg border border-gray-200 overflow-hidden">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-transparent pb-4">
+          <div className="flex items-center gap-3">
+            <Book className="h-6 w-6 text-blue-600" />
+            <CardTitle className="text-xl text-gray-800">College Admission Chances</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-4 px-5">
+          <div className="grid gap-4">
             {results.collegeChances.map((college, index) => (
-              <div key={index} className="border rounded-lg overflow-hidden">
-                <div className="p-4 flex justify-between items-center">
-                  <h3 className="text-lg font-medium text-gray-800">{college.name}</h3>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getColorClass(college.color)}`}>
-                    {college.chance}
-                  </span>
+              <div key={index} className={`border rounded-lg overflow-hidden shadow-sm ${index === 0 ? 'border-blue-200' : ''}`}>
+                <div className={`p-4 flex justify-between items-center ${index === 0 ? 'bg-blue-50' : ''}`}>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-lg font-medium text-gray-800">{college.name}</h3>
+                    {index === 0 && <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800 border-blue-200">Top Choice</Badge>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {getChanceIcon(college.chance)}
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getColorClass(college.color)}`}>
+                      {college.chance}
+                    </span>
+                  </div>
                 </div>
                 <div className="border-t border-gray-200 px-4 py-3 bg-gray-50">
-                  <p className="text-sm text-gray-700">{college.feedback}</p>
+                  <p className="text-sm text-gray-700 leading-relaxed">{college.feedback}</p>
                 </div>
               </div>
             ))}
@@ -76,33 +102,35 @@ export function ResultsDisplay({ results, onReset }: ResultsDisplayProps) {
       </Card>
 
       {/* Personalized Improvement Plan Card */}
-      <Card className="bg-white shadow-sm rounded-lg p-6">
-        <CardContent className="p-0">
-          <h2 className="text-xl font-semibold mb-6 text-gray-800">Personalized Improvement Plan</h2>
-          
-          <ul className="space-y-3">
+      <Card className="bg-white shadow-md rounded-lg border border-gray-200 overflow-hidden">
+        <CardHeader className="bg-gradient-to-r from-green-50 to-transparent pb-4">
+          <div className="flex items-center gap-3">
+            <Award className="h-6 w-6 text-green-600" />
+            <CardTitle className="text-xl text-gray-800">Your Action Plan</CardTitle>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">Follow these steps to enhance your college application profile</p>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <ul className="grid gap-4">
             {results.improvementPlan.map((item, index) => (
-              <li key={index} className="flex">
-                <div className="flex-shrink-0">
-                  <CheckCircle className="h-6 w-6 text-green-500" />
+              <li key={index} className="flex items-start gap-3 p-3 rounded-lg bg-green-50 border border-green-100">
+                <div className="flex-shrink-0 mt-0.5">
+                  <CheckCircle className="h-5 w-5 text-green-500" />
                 </div>
-                <span className="ml-3 text-gray-700">{item}</span>
+                <span className="text-gray-700">{item}</span>
               </li>
             ))}
           </ul>
         </CardContent>
+        <CardFooter className="bg-gray-50 pt-4 flex justify-center">
+          <Button 
+            onClick={onReset}
+            className="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-full shadow-sm transition-all hover:shadow"
+          >
+            Start a New Assessment
+          </Button>
+        </CardFooter>
       </Card>
-
-      {/* Reset Button */}
-      <div className="flex justify-center mt-8">
-        <Button 
-          variant="outline" 
-          onClick={onReset}
-          className="px-6 py-3"
-        >
-          Start a New Assessment
-        </Button>
-      </div>
     </div>
   );
 }

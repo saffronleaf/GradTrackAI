@@ -33,7 +33,9 @@ export function ReviewSubmit({ formData, onPrev, onSubmit, isSubmitting }: Revie
   };
   
   // Format honor/award level for display
-  const formatLevel = (level: string) => {
+  const formatLevel = (level?: string) => {
+    if (!level) return "Not specified";
+    
     switch (level) {
       case "school": return "School";
       case "district": return "District/Regional";
@@ -45,13 +47,15 @@ export function ReviewSubmit({ formData, onPrev, onSubmit, isSubmitting }: Revie
   };
   
   // Format grade year for display
-  const formatGradeYear = (year: string) => {
+  const formatGradeYear = (year?: string) => {
+    if (!year) return "Not specified";
+    
     switch (year) {
       case "9": return "Freshman Year (9th)";
       case "10": return "Sophomore Year (10th)";
       case "11": return "Junior Year (11th)";
       case "12": return "Senior Year (12th)";
-      default: return "Not specified";
+      default: return year;
     }
   };
 
