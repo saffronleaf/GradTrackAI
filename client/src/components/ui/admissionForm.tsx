@@ -50,7 +50,25 @@ export function AdmissionForm() {
     },
     onSuccess: (data) => {
       if (data.success) {
-        setResults(data.result);
+        // Check if we have a note about fallback mode
+        const isFallbackMode = data.note && data.note.includes("simulation");
+        
+        // Set the results and any fallback notification
+        setResults({
+          ...data.result,
+          isFallbackMode: isFallbackMode || false,
+          fallbackNote: data.note || null
+        });
+        
+        // If using fallback mode, show a toast
+        if (isFallbackMode) {
+          toast({
+            title: "Using Simulated Analysis",
+            description: data.note,
+            duration: 6000,
+          });
+        }
+        
         setFormSubmitted(true);
         window.scrollTo(0, 0);
       } else {

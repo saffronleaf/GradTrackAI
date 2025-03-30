@@ -69,6 +69,8 @@ export const analysisResultSchema = z.object({
   overallAssessment: z.string(),
   collegeChances: z.array(collegeChanceSchema),
   improvementPlan: z.array(z.string()),
+  isFallbackMode: z.boolean().optional(),
+  fallbackNote: z.string().nullable().optional(),
 });
 
 export type CollegeChance = z.infer<typeof collegeChanceSchema>;
